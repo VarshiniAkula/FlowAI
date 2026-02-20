@@ -1,0 +1,54 @@
+{
+  "id": "billing_flow",
+  "description": "Answers common billing requests",
+  "nodes": {
+    "start": {
+      "id": "start",
+      "type": "message",
+      "text": "I can help with billing.",
+      "next": "billing_reason"
+    },
+    "billing_reason": {
+      "id": "billing_reason",
+      "type": "choice",
+      "text": "What billing issue are you facing?",
+      "choices": {
+        "refund": "refund_info",
+        "invoice": "invoice_info",
+        "payment": "payment_info"
+      },
+      "default": "agent_handoff"
+    },
+    "refund_info": {
+      "id": "refund_info",
+      "type": "message",
+      "text": "Refunds are typically processed within 5-7 business days.",
+      "next": "end"
+    },
+    "invoice_info": {
+      "id": "invoice_info",
+      "type": "message",
+      "text": "You can download invoices from your account billing section.",
+      "next": "end"
+    },
+    "payment_info": {
+      "id": "payment_info",
+      "type": "message",
+      "text": "Please verify card details or try another payment method.",
+      "next": "end"
+    },
+    "agent_handoff": {
+      "id": "agent_handoff",
+      "type": "message",
+      "text": "I am connecting you to a billing specialist.",
+      "next": "end"
+    },
+    "end": {
+      "id": "end",
+      "type": "message",
+      "text": "Anything else I can help you with?",
+      "next": null
+    }
+  },
+  "start_node": "start"
+}

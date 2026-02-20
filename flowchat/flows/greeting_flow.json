@@ -1,0 +1,26 @@
+{
+  "id": "greeting_flow",
+  "description": "Handles greetings and small talk",
+  "nodes": {
+    "start": {
+      "id": "start",
+      "type": "message",
+      "text": "Hi! I am FlowChat. How can I help you today?",
+      "next": "capture_need"
+    },
+    "capture_need": {
+      "id": "capture_need",
+      "type": "input",
+      "slot": "user_need",
+      "text": "Tell me what you need help with.",
+      "next": "end"
+    },
+    "end": {
+      "id": "end",
+      "type": "message",
+      "text": "Thanks. I can route you to billing or support based on your request.",
+      "next": null
+    }
+  },
+  "start_node": "start"
+}

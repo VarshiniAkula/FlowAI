@@ -1,0 +1,29 @@
+fastapi
+uvicorn
+requests
+
+# Database
+sqlalchemy>=2.0
+aiosqlite
+greenlet
+
+# LLM
+anthropic>=0.25.0
+
+# RAG
+chromadb>=0.4.0
+sentence-transformers>=2.7.0
+
+# Document parsing
+PyPDF2>=3.0.0
+python-docx>=1.1.0
+
+# FastAPI extras
+python-multipart
+pydantic>=2.0
+
+# Safe expression eval for condition nodes
+simpleeval
+
+# Env
+python-dotenv

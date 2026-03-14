@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ReactFlow canvas background */
+.react-flow__background {
+  background-color: #f8fafc;
+}
+
+/* Custom node styles */
+.flow-node {
+  @apply bg-white rounded-lg shadow-md border border-gray-200 min-w-[180px] max-w-[260px];
+}
+
+.flow-node.selected {
+  @apply ring-2 ring-blue-500;
+}
+
+.node-header {
+  @apply px-3 py-2 rounded-t-lg text-white text-xs font-semibold flex items-center gap-1.5;
+}
+
+.node-body {
+  @apply px-3 py-2 text-xs text-gray-700;
+}
+
+/* Node type colors */
+.node-message   { @apply bg-blue-500; }
+.node-input     { @apply bg-emerald-500; }
+.node-choice    { @apply bg-violet-500; }
+.node-condition { @apply bg-orange-500; }
+.node-rag_query { @apply bg-cyan-500; }
+.node-llm_response { @apply bg-rose-500; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }

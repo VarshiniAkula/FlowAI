@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Brain, Plus, Search, ArrowUpRight, Sparkles, Workflow } from 'lucide-react';
@@ -38,20 +38,23 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [mounted, setMounted] = useState(false);
 
-  const filtered = assistants.filter((a) =>
+  useEffect(() => setMounted(true), []);
+
+  const filtered = (mounted ? assistants : []).filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()),
   );
 
   const handleCreate = () => {
     if (!newName.trim()) return;
     const a = createAssistant(newName.trim(), newDesc.trim() || undefined);
-    router.push(`/editor/${a.id}/story`);
+    router.push(`/editor/${a.id}/canvas`);
   };
 
   const handleCreateFromTemplate = (template: (typeof TEMPLATES)[number]) => {
     const a = createAssistant(template.name, template.description);
-    router.push(`/editor/${a.id}/story`);
+    router.push(`/editor/${a.id}/canvas`);
   };
 
   return (
@@ -125,9 +128,11 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-xl font-semibold">Your assistants</h2>
               <p className="text-sm text-muted-foreground">
-                {assistants.length === 0
-                  ? 'You have no assistants yet'
-                  : `${assistants.length} total`}
+                {!mounted
+                  ? '\u00a0'
+                  : assistants.length === 0
+                    ? 'You have no assistants yet'
+                    : `${assistants.length} total`}
               </p>
             </div>
           </div>
@@ -152,7 +157,7 @@ export default function DashboardPage() {
               {filtered.map((a) => (
                 <Link
                   key={a.id}
-                  href={`/editor/${a.id}/story`}
+                  href={`/editor/${a.id}/canvas`}
                   className="group block"
                 >
                   <Card className="h-full p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">

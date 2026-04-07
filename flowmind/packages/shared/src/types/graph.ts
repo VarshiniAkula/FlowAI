@@ -1,4 +1,4 @@
-import type { NodeType } from '../constants/node-types.js';
+import type { NodeType } from '../constants/node-types';
 
 export interface GraphNode {
   id: string;

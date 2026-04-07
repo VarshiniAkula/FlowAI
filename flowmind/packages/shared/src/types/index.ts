@@ -1,3 +1,3 @@
-export * from './graph.js';
-export * from './runtime.js';
-export * from './assistant.js';
+export * from './graph';
+export * from './runtime';
+export * from './assistant';

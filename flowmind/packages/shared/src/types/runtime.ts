@@ -1,4 +1,4 @@
-import type { Graph, GraphNode } from './graph.js';
+import type { Graph, GraphNode } from './graph';
 
 export interface ConversationMessage {
   role: 'user' | 'assistant' | 'system';

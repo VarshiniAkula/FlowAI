@@ -121,7 +121,7 @@ function findStartNodeId(graph: Graph): string | null {
   // The "start" is the node with no inbound edges.
   const targets = new Set(graph.edges.map((e) => e.target));
   const start = graph.nodes.find((n) => !targets.has(n.id));
-  return (start ?? graph.nodes[0]).id;
+  return (start ?? graph.nodes[0]!).id;
 }
 
 function cloneState(s: ConversationState): ConversationState {

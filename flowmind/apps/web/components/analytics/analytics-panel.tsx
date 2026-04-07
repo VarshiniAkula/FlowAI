@@ -514,13 +514,14 @@ function maxBranchingFactor(nodes: GraphNode[], edges: GraphEdge[]): number {
 
 function estimateDepth(nodes: GraphNode[], edges: GraphEdge[]): number {
   if (nodes.length === 0) return 0;
+  const fallback = nodes[0]!.id;
   // Simple BFS from each candidate start to find longest acyclic path length.
   const adj = new Map<string, string[]>();
   for (const n of nodes) adj.set(n.id, []);
   for (const e of edges) adj.get(e.source)?.push(e.target);
   const inbound = new Set(edges.map((e) => e.target));
   const starts = nodes.filter((n) => !inbound.has(n.id)).map((n) => n.id);
-  const startSet = starts.length > 0 ? starts : [nodes[0].id];
+  const startSet = starts.length > 0 ? starts : [fallback];
 
   let maxDepth = 0;
   const dfs = (id: string, depth: number, visited: Set<string>) => {

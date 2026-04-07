@@ -244,7 +244,7 @@ function pickDefaultEdge(ctx: ExecutionContext): string | null {
   if (edges.length === 0) return null;
   // Prefer an edge with no sourceHandle (the "default" out)
   const def = edges.find((e) => !e.sourceHandle);
-  return (def ?? edges[0]).target;
+  return (def ?? edges[0]!).target;
 }
 
 function findEdgeByHandle(ctx: ExecutionContext, handle: string): string | null {
@@ -262,8 +262,8 @@ function matchChoice(
   // 1. Numeric pick (e.g. "1", "2.")
   const numMatch = trimmed.match(/^(\d+)/);
   if (numMatch) {
-    const idx = parseInt(numMatch[1], 10) - 1;
-    if (idx >= 0 && idx < options.length) return options[idx];
+    const idx = parseInt(numMatch[1]!, 10) - 1;
+    if (idx >= 0 && idx < options.length) return options[idx]!;
   }
 
   // 2. Exact value or label match

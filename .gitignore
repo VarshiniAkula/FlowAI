@@ -202,6 +202,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# FlowMind monorepo (Next.js) — re-include lib dirs excluded by Python lib/ rule above
+!flowmind/apps/*/lib
+!flowmind/apps/*/lib/**
+!flowmind/packages/*/lib
+!flowmind/packages/*/lib/**
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data

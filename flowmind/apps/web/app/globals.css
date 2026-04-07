@@ -1,0 +1,111 @@
+@import 'tailwindcss';
+@import '@xyflow/react/dist/style.css';
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: oklch(0.99 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.145 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.205 0 0);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.97 0 0);
+  --color-secondary-foreground: oklch(0.205 0 0);
+  --color-muted: oklch(0.97 0 0);
+  --color-muted-foreground: oklch(0.556 0 0);
+  --color-accent: oklch(0.97 0 0);
+  --color-accent-foreground: oklch(0.205 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.922 0 0);
+  --color-input: oklch(0.922 0 0);
+  --color-ring: oklch(0.708 0 0);
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+/* React Flow overrides for dark canvas */
+.react-flow__node {
+  font-family: var(--font-sans);
+}
+
+.flowmind-canvas .react-flow__background {
+  background-color: oklch(0.13 0 0);
+}
+
+.flowmind-canvas .react-flow__controls {
+  background: oklch(0.18 0 0);
+  border: 1px solid oklch(0.25 0 0);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.flowmind-canvas .react-flow__controls-button {
+  background: oklch(0.18 0 0);
+  border-bottom: 1px solid oklch(0.25 0 0);
+  color: oklch(0.85 0 0);
+}
+.flowmind-canvas .react-flow__controls-button:hover {
+  background: oklch(0.22 0 0);
+}
+.flowmind-canvas .react-flow__minimap {
+  background: oklch(0.18 0 0);
+  border: 1px solid oklch(0.25 0 0);
+  border-radius: 0.5rem;
+}
+.flowmind-canvas .react-flow__attribution {
+  background: transparent;
+  color: oklch(0.5 0 0);
+}
+.flowmind-canvas .react-flow__edge-path {
+  stroke: oklch(0.5 0 0);
+  stroke-width: 2;
+}
+.flowmind-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: oklch(0.7 0.18 250);
+  stroke-width: 3;
+}
+.flowmind-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: oklch(0.5 0 0);
+  border: 2px solid oklch(0.18 0 0);
+}
+.flowmind-canvas .react-flow__handle:hover {
+  background: oklch(0.7 0.18 250);
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(59 130 246 / 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgb(59 130 246 / 0);
+  }
+}
+
+.node-active {
+  animation: pulse-ring 1.5s ease-out infinite;
+}

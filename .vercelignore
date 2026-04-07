@@ -1,0 +1,17 @@
+node_modules
+.next
+.turbo
+flowchat
+.claude
+.git
+*.log
+.DS_Store
+coverage
+dist
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+chroma_db
+uploads

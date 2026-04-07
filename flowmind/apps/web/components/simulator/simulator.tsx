@@ -48,7 +48,7 @@ export function Simulator({ assistantId }: Props) {
     [nodes, edges, assistant?.graph.variables],
   );
 
-  const services = useMemo(() => createSimulatorServices(), []);
+  const services = useMemo(() => createSimulatorServices(assistantId), [assistantId]);
 
   const [state, setState] = useState<ConversationState>(() => createInitialState());
   const [messages, setMessages] = useState<ChatMessage[]>([]);

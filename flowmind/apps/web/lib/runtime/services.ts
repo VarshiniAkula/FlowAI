@@ -1,19 +1,26 @@
 import type { RetrievedChunk, RuntimeServices } from '@flowmind/shared';
+import { useKnowledgeStore } from '@/lib/knowledge/store';
 
 /**
  * Default in-memory services suitable for the Simulator.
  *
- * - retrieval: returns nothing (Knowledge upload is implemented in a later
- *   phase). When the user wires up real document indexing, swap this for the
- *   server-side retrieval client.
- * - llm: dispatches to the same Gemini API the Story Builder uses, via a
- *   thin server route so we don't ship the API key into the browser bundle.
+ * - retrieval: scoped to the active assistant via the in-browser knowledge
+ *   store. Phase 2/3 will swap this for server-side pgvector + reranking.
+ * - llm: dispatches to Gemini via /api/llm-complete so the API key stays on
+ *   the server.
  */
-export function createSimulatorServices(): RuntimeServices {
+export function createSimulatorServices(assistantId: string): RuntimeServices {
   return {
     retrieval: {
-      async query(_query: string, _topK: number): Promise<RetrievedChunk[]> {
-        return [];
+      async query(query: string, topK: number): Promise<RetrievedChunk[]> {
+        const hits = useKnowledgeStore.getState().search(assistantId, query, topK);
+        return hits.map((h) => ({
+          content: h.chunk.text,
+          source: h.chunk.documentId,
+          score: h.score,
+          documentId: h.chunk.documentId,
+          metadata: { chunkIndex: h.chunk.index },
+        }));
       },
     },
     llm: {

@@ -48,7 +48,7 @@ export function Hero() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            v0.1 — Vertical slice live
+            v0.5 — Streaming, hosted chats, live analytics
           </div>
 
           <h1 className="text-5xl font-bold tracking-tight sm:text-7xl">

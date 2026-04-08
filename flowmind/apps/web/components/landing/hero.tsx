@@ -57,8 +57,10 @@ export function Hero() {
             </span>
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-balance text-lg text-muted-foreground sm:text-xl">
-            Figma for conversational AI + a debugger for AI behavior. Visual
-            graph runtime, knowledge grounding, deep tracing, one-click deploy.
+            Design, debug, and ship AI assistants on a visual canvas. Drag
+            nodes to build the conversation, ground answers in your own
+            documents, watch every turn stream in real time, and publish a
+            hosted chat in one click.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">

@@ -12,6 +12,8 @@ import {
   ShieldCheck,
   Share2,
   AlertCircle,
+  CloudUpload,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,15 +34,22 @@ export function DeployPanel({ assistantId }: Props) {
   const [origin, setOrigin] = useState<string>('');
   const [copied, setCopied] = useState<string | null>(null);
   const [channel, setChannel] = useState<Channel>('embed');
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
 
   const isPublished = assistant?.status === 'active';
+  const cloudPublishId = assistant?.cloudPublishId;
+  const cloudVersion = assistant?.cloudVersion;
+  // Visitors should hit the immutable cloud id; the owner-preview falls back
+  // to the local assistantId so the editor still works without a publish.
+  const publicId = cloudPublishId ?? assistantId;
   const shareUrl = useMemo(
-    () => (origin ? `${origin}/chat/${assistantId}` : ''),
-    [origin, assistantId],
+    () => (origin ? `${origin}/chat/${publicId}` : ''),
+    [origin, publicId],
   );
   const apiUrl = useMemo(
     () => (origin ? `${origin}/api/assistants/${assistantId}/chat` : ''),
@@ -52,12 +61,12 @@ export function DeployPanel({ assistantId }: Props) {
     return `<!-- FlowMind Assistant — ${assistant?.name ?? assistantId} -->
 <script
   src="${origin}/widget.js"
-  data-flowmind-assistant="${assistantId}"
+  data-flowmind-assistant="${publicId}"
   data-flowmind-host="${origin}"
   data-flowmind-theme="auto"
   defer
 ></script>`;
-  }, [origin, assistantId, assistant?.name]);
+  }, [origin, publicId, assistantId, assistant?.name]);
 
   const reactSnippet = useMemo(() => {
     if (!origin) return '';
@@ -66,13 +75,13 @@ export function DeployPanel({ assistantId }: Props) {
 export default function App() {
   return (
     <FlowMindWidget
-      assistantId="${assistantId}"
+      assistantId="${publicId}"
       host="${origin}"
       theme="auto"
     />
   );
 }`;
-  }, [origin, assistantId]);
+  }, [origin, publicId]);
 
   const apiSnippet = useMemo(() => {
     if (!origin) return '';
@@ -99,6 +108,43 @@ export default function App() {
     updateAssistant(assistantId, {
       status: isPublished ? 'draft' : 'active',
     });
+  };
+
+  const publishToCloud = async () => {
+    if (!assistant) return;
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assistantId,
+          name: assistant.name,
+          description: assistant.description ?? null,
+          graph: assistant.graph,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        publishId?: string;
+        version?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.publishId) {
+        throw new Error(data.error ?? `Publish failed (${res.status})`);
+      }
+      updateAssistant(assistantId, {
+        status: 'active',
+        cloudPublishId: data.publishId,
+        cloudVersion: data.version,
+        cloudPublishedAt: Date.now(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Publish failed';
+      setPublishError(message);
+    } finally {
+      setPublishing(false);
+    }
   };
 
   if (!assistant) {
@@ -133,49 +179,101 @@ export default function App() {
         <div
           className={cn(
             'mb-6 flex items-center gap-4 rounded-xl border p-4',
-            isPublished
+            cloudPublishId
               ? 'border-emerald-200/60 bg-gradient-to-r from-emerald-50/60 to-teal-50/40 dark:border-emerald-900/40 dark:from-emerald-950/30 dark:to-teal-950/20'
-              : 'border-amber-200/60 bg-gradient-to-r from-amber-50/60 to-orange-50/40 dark:border-amber-900/40 dark:from-amber-950/30 dark:to-orange-950/20',
+              : isPublished
+                ? 'border-violet-200/60 bg-gradient-to-r from-violet-50/60 to-pink-50/40 dark:border-violet-900/40 dark:from-violet-950/30 dark:to-pink-950/20'
+                : 'border-amber-200/60 bg-gradient-to-r from-amber-50/60 to-orange-50/40 dark:border-amber-900/40 dark:from-amber-950/30 dark:to-orange-950/20',
           )}
         >
           <div
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-full',
-              isPublished
+              cloudPublishId
                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+                : isPublished
+                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
             )}
           >
-            {isPublished ? (
+            {cloudPublishId ? (
               <ShieldCheck className="size-5" />
+            ) : isPublished ? (
+              <CloudUpload className="size-5" />
             ) : (
               <Sparkles className="size-5" />
             )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold">
-              {isPublished ? 'Live' : 'Draft'}
-              <Badge variant={isPublished ? 'success' : 'warning'}>
-                {isPublished ? 'Published' : 'Not published yet'}
+              {cloudPublishId
+                ? 'Live in cloud'
+                : isPublished
+                  ? 'Local draft'
+                  : 'Draft'}
+              <Badge
+                variant={
+                  cloudPublishId ? 'success' : isPublished ? 'info' : 'warning'
+                }
+              >
+                {cloudPublishId
+                  ? `v${cloudVersion ?? 1}`
+                  : isPublished
+                    ? 'Owner-only'
+                    : 'Not published'}
               </Badge>
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {isPublished
-                ? 'Anyone with your snippet or link can chat with this assistant.'
+              {cloudPublishId
+                ? 'Anyone with your link can chat with this assistant.'
                 : ready
-                  ? 'Publish to make this assistant reachable from the embed and link.'
+                  ? 'Publish to the cloud to share a public link that works for visitors.'
                   : 'Add at least one node on the canvas before publishing.'}
             </div>
           </div>
-          <Button
-            variant={isPublished ? 'outline' : 'gradient'}
-            size="sm"
-            onClick={togglePublish}
-            disabled={!ready}
-          >
-            {isPublished ? 'Unpublish' : 'Publish'}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              variant="gradient"
+              size="sm"
+              onClick={publishToCloud}
+              disabled={!ready || publishing}
+            >
+              {publishing ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Publishing...
+                </>
+              ) : cloudPublishId ? (
+                <>
+                  <CloudUpload className="size-3.5" />
+                  Republish
+                </>
+              ) : (
+                <>
+                  <CloudUpload className="size-3.5" />
+                  Publish to cloud
+                </>
+              )}
+            </Button>
+            {!cloudPublishId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={togglePublish}
+                disabled={!ready}
+              >
+                {isPublished ? 'Unpublish' : 'Mark live'}
+              </Button>
+            )}
+          </div>
         </div>
+
+        {publishError && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{publishError}</span>
+          </div>
+        )}
 
         {!ready && (
           <div className="mb-6 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
@@ -237,8 +335,15 @@ export default function App() {
 
           <TabsContent value="link" className="mt-4 space-y-4">
             <div className="rounded-xl border bg-card p-5">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Shareable URL
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Shareable URL
+                </div>
+                {cloudPublishId ? (
+                  <Badge variant="success">Public · v{cloudVersion ?? 1}</Badge>
+                ) : (
+                  <Badge variant="warning">Owner preview</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 font-mono text-xs">
                 <span className="flex-1 truncate">{shareUrl || '…'}</span>
@@ -264,8 +369,9 @@ export default function App() {
                 </a>
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
-                Send this link to anyone — they'll get a full-page chat
-                experience without needing to install anything.
+                {cloudPublishId
+                  ? "Send this link to anyone — they'll get a full-page chat experience without needing to install anything."
+                  : 'This URL only works in your browser until you click Publish to cloud above. Then it becomes a real public link.'}
               </p>
             </div>
 
@@ -275,7 +381,10 @@ export default function App() {
                 label="Variables"
                 value={(assistant.graph.variables ?? []).length.toString()}
               />
-              <Stat label="Status" value={isPublished ? 'Live' : 'Draft'} />
+              <Stat
+                label="Cloud version"
+                value={cloudPublishId ? `v${cloudVersion ?? 1}` : '—'}
+              />
             </div>
           </TabsContent>
 

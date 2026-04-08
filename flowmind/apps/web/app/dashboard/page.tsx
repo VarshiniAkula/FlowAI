@@ -12,28 +12,57 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { formatRelativeTime } from '@/lib/utils';
+import { generateHeuristicGraph } from '@/lib/graph-generator/heuristic';
+import type { Graph, GraphNode, GraphEdge, NodeType } from '@flowmind/shared';
 
 const TEMPLATES = [
   {
     name: 'Customer Support Bot',
     description: 'Routes tickets, answers FAQs, escalates to humans',
     icon: '🎧',
+    // Keep keywords aligned with the heuristic generator's "support" archetype
+    // (avoid words like "knowledge"/"docs" which would route to the knowledge bot).
+    seedStory:
+      'A customer support bot that triages incoming tickets, troubleshoots common issues, and escalates to a human agent when needed.',
   },
   {
     name: 'Sales Qualifier',
     description: 'Qualifies leads, books demos, captures intent',
     icon: '💼',
+    seedStory:
+      'A sales qualification bot that qualifies leads by capturing company size and use case, then offers to book a demo.',
   },
   {
     name: 'Knowledge Assistant',
     description: 'Answers questions from your documentation',
     icon: '📚',
+    seedStory:
+      'A documentation assistant that answers user questions strictly from uploaded docs and a knowledge base, citing sources for every claim.',
   },
 ];
 
+// Convert the heuristic GeneratedGraph shape into the canonical shared Graph
+function generatedGraphToGraph(generated: ReturnType<typeof generateHeuristicGraph>): Graph {
+  const nodes: GraphNode[] = generated.nodes.map((n) => ({
+    id: n.id,
+    type: n.type as NodeType,
+    position: n.position,
+    label: n.label,
+    data: n.data as GraphNode['data'],
+  }));
+  const edges: GraphEdge[] = generated.edges.map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
+    ...(e.label ? { label: e.label } : {}),
+  }));
+  return { nodes, edges, variables: [] };
+}
+
 export default function DashboardPage() {
   const router = useRouter();
-  const { assistants, createAssistant } = useAssistantStore();
+  const { assistants, createAssistant, saveGraph } = useAssistantStore();
   const [query, setQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
@@ -54,6 +83,8 @@ export default function DashboardPage() {
 
   const handleCreateFromTemplate = (template: (typeof TEMPLATES)[number]) => {
     const a = createAssistant(template.name, template.description);
+    const generated = generateHeuristicGraph(template.seedStory);
+    saveGraph(a.id, generatedGraphToGraph(generated));
     router.push(`/editor/${a.id}/canvas`);
   };
 

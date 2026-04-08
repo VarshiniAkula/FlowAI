@@ -25,27 +25,95 @@ interface ChatMessage {
   content: string;
 }
 
+interface PublishedPayload {
+  id: string;
+  assistantId: string;
+  name: string;
+  description: string | null;
+  graph: Graph;
+  version: number;
+  publishedAt: string;
+}
+
 /**
  * Hosted, public-facing chat experience for a published assistant.
  *
- * This is the page anyone with the share link lands on, and it's also what the
- * widget loads inside an iframe. It reuses the same in-browser runtime as the
- * Simulator — Phase 1 keeps everything client-side so a single static deploy
- * is enough to demo end-to-end. Server-side execution comes in Phase 2 with
- * the proper assistants API.
+ * Resolves the assistant in two ways depending on the id shape:
+ * - `pub_*` ids → server-fetched from /api/published/[id] (Supabase). This is
+ *   what visitors hit; the snapshot is immutable per publish, so the route can
+ *   cache aggressively at the edge.
+ * - Anything else → owner preview from localStorage via the assistant store.
+ *   This keeps the editor → preview loop instant and offline-friendly.
+ *
+ * The runtime itself is the same in both cases — once we have a Graph and a
+ * meta record, we hand it to the in-browser engine.
  */
 export function HostedChat({ assistantId, embed = false }: Props) {
+  const isCloudId = assistantId.startsWith('pub_');
   const [hydrated, setHydrated] = useState(false);
   const [assistant, setAssistant] = useState<Assistant | undefined>(undefined);
+  const [cloudLoading, setCloudLoading] = useState(isCloudId);
+  const [cloudError, setCloudError] = useState<string | null>(null);
 
-  // Subscribe imperatively to dodge React 19 + Zustand persist snapshot issues.
+  // Local-mode subscription (owner preview only). For cloud ids we just fetch
+  // once on mount and treat the response as the source of truth.
   useEffect(() => {
+    if (isCloudId) return;
     const read = () => useAssistantStore.getState().getAssistant(assistantId);
     setAssistant(read());
     setHydrated(true);
     const unsub = useAssistantStore.subscribe(() => setAssistant(read()));
     return unsub;
-  }, [assistantId]);
+  }, [assistantId, isCloudId]);
+
+  // Cloud fetch path: hit the published API and synthesize a runtime Assistant.
+  useEffect(() => {
+    if (!isCloudId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/published/${assistantId}`, {
+          method: 'GET',
+        });
+        if (cancelled) return;
+        if (res.status === 404) {
+          setCloudError('not-found');
+          setHydrated(true);
+          setCloudLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          throw new Error(`Failed to load assistant (${res.status})`);
+        }
+        const data = (await res.json()) as PublishedPayload;
+        if (cancelled) return;
+        const publishedAt = Date.parse(data.publishedAt) || Date.now();
+        const synthetic: Assistant = {
+          id: data.id,
+          name: data.name,
+          description: data.description ?? undefined,
+          status: 'active',
+          createdAt: publishedAt,
+          updatedAt: publishedAt,
+          graph: data.graph,
+          cloudPublishId: data.id,
+          cloudVersion: data.version,
+          cloudPublishedAt: publishedAt,
+        };
+        setAssistant(synthetic);
+        setHydrated(true);
+        setCloudLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        setCloudError(err instanceof Error ? err.message : 'Failed to load');
+        setHydrated(true);
+        setCloudLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assistantId, isCloudId]);
 
   const graph: Graph = useMemo(
     () => ({
@@ -137,7 +205,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, graph.nodes.length]);
 
-  if (!hydrated) {
+  if (!hydrated || cloudLoading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
@@ -146,6 +214,12 @@ export function HostedChat({ assistantId, embed = false }: Props) {
   }
 
   if (!assistant) {
+    const notFoundCopy =
+      cloudError === 'not-found'
+        ? "We couldn't find a published assistant at this link. It may have been deleted or the link is wrong."
+        : cloudError
+          ? cloudError
+          : "This assistant either hasn't been published yet or the link is wrong.";
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="max-w-md text-center">
@@ -153,15 +227,15 @@ export function HostedChat({ assistantId, embed = false }: Props) {
             <Bot className="size-6 text-muted-foreground" />
           </div>
           <h1 className="text-lg font-semibold">Assistant not found</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This assistant either hasn&apos;t been published yet or the link is wrong.
-          </p>
+          <p className="mt-2 text-sm text-muted-foreground">{notFoundCopy}</p>
         </div>
       </div>
     );
   }
 
-  if (assistant.status !== 'active') {
+  // Cloud-fetched assistants are always live by definition. The draft gate
+  // only applies to local owner-preview mode.
+  if (!isCloudId && assistant.status !== 'active') {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="max-w-md text-center">

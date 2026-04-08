@@ -95,7 +95,7 @@ export const handleChoice: NodeHandler = async (ctx) => {
       stateUpdates: {},
       messages: [
         {
-          content: `I didn't catch that — please pick one of: ${options.map((o) => o.label).join(', ')}.`,
+          content: `I didn't catch that - please pick one of: ${options.map((o) => o.label).join(', ')}.`,
         },
       ],
       waitForUser: true,

@@ -154,7 +154,7 @@ export function Simulator({ assistantId }: Props) {
             <div>
               <div className="text-sm font-semibold">Simulator</div>
               <div className="text-[11px] text-muted-foreground">
-                Chat with your assistant locally — every step is traced.
+                Chat with your assistant locally - every step is traced.
               </div>
             </div>
           </div>
@@ -206,7 +206,7 @@ export function Simulator({ assistantId }: Props) {
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={done ? 'Conversation ended — press Reset' : 'Type a message...'}
+              placeholder={done ? 'Conversation ended - press Reset' : 'Type a message...'}
               disabled={done || running || !startedRef.current}
               className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
             />

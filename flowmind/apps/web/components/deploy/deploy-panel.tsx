@@ -58,7 +58,7 @@ export function DeployPanel({ assistantId }: Props) {
 
   const embedSnippet = useMemo(() => {
     if (!origin) return '';
-    return `<!-- FlowMind Assistant — ${assistant?.name ?? assistantId} -->
+    return `<!-- FlowMind Assistant - ${assistant?.name ?? assistantId} -->
 <script
   src="${origin}/widget.js"
   data-flowmind-assistant="${publicId}"
@@ -99,7 +99,7 @@ export default function App() {
       setCopied(key);
       setTimeout(() => setCopied(null), 1500);
     } catch {
-      // Clipboard API may be blocked in iframes — silently degrade
+      // Clipboard API may be blocked in iframes - silently degrade
     }
   };
 
@@ -370,7 +370,7 @@ export default function App() {
               </div>
               <p className="mt-3 text-xs text-muted-foreground">
                 {cloudPublishId
-                  ? "Send this link to anyone — they'll get a full-page chat experience without needing to install anything."
+                  ? "Send this link to anyone - they'll get a full-page chat experience without needing to install anything."
                   : 'This URL only works in your browser until you click Publish to cloud above. Then it becomes a real public link.'}
               </p>
             </div>
@@ -383,7 +383,7 @@ export default function App() {
               />
               <Stat
                 label="Cloud version"
-                value={cloudPublishId ? `v${cloudVersion ?? 1}` : '—'}
+                value={cloudPublishId ? `v${cloudVersion ?? 1}` : '-'}
               />
             </div>
           </TabsContent>

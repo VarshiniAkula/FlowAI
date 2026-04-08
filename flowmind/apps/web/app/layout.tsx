@@ -7,8 +7,8 @@ const SITE_URL =
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'FlowMind — Visual AI Assistant Platform',
-    template: '%s — FlowMind',
+    default: 'FlowMind - Visual AI Assistant Platform',
+    template: '%s - FlowMind',
   },
   description:
     'A visual, production-grade AI assistant platform with graph runtime, RAG, and one-click deployment.',
@@ -25,14 +25,14 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'FlowMind',
-    title: 'FlowMind — Visual AI Assistant Platform',
+    title: 'FlowMind - Visual AI Assistant Platform',
     description:
       'Build, test, and ship LLM-powered assistants from a visual canvas. Cloud publishing in one click.',
     url: SITE_URL,
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'FlowMind — Visual AI Assistant Platform',
+    title: 'FlowMind - Visual AI Assistant Platform',
     description:
       'Build, test, and ship LLM-powered assistants from a visual canvas.',
   },

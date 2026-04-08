@@ -14,7 +14,7 @@ interface StartBody {
  * `pub_*` chat page so the analytics card can show real session counts.
  *
  * The schema's `assistant_id` is the *owner-side* assistantId baked into the
- * publish snapshot, not the public publish id — we keep both columns so the
+ * publish snapshot, not the public publish id - we keep both columns so the
  * Analytics page can query "all conversations for this assistant across every
  * publish version" without joining.
  */
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
   if (error) {
     console.error('[api/conversations] insert error:', error);
-    // Degrade gracefully — telemetry never blocks the chat experience.
+    // Degrade gracefully - telemetry never blocks the chat experience.
     return NextResponse.json({ conversationId: `local_${nanoid(10)}`, ephemeral: true });
   }
 

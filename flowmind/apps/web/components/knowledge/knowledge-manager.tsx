@@ -125,7 +125,7 @@ export function KnowledgeManager({ assistantId }: Props) {
           </div>
           <div className="text-sm font-medium">Drop files here or click to upload</div>
           <div className="mt-1 text-[11px] text-muted-foreground">
-            Supports .txt, .md, .csv, .html — up to 4 MB per file
+            Supports .txt, .md, .csv, .html - up to 4 MB per file
           </div>
           <Button
             variant="outline"

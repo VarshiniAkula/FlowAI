@@ -44,7 +44,7 @@ export async function GET(
     },
     {
       headers: {
-        // Cache published graphs aggressively at the edge — they're immutable
+        // Cache published graphs aggressively at the edge - they're immutable
         // by design (each publish creates a new id).
         'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=86400',
       },

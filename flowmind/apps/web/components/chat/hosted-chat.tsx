@@ -45,7 +45,7 @@ interface PublishedPayload {
  * - Anything else → owner preview from localStorage via the assistant store.
  *   This keeps the editor → preview loop instant and offline-friendly.
  *
- * The runtime itself is the same in both cases — once we have a Graph and a
+ * The runtime itself is the same in both cases - once we have a Graph and a
  * meta record, we hand it to the in-browser engine.
  */
 export function HostedChat({ assistantId, embed = false }: Props) {
@@ -262,7 +262,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
         content: m.content,
       })),
     ]);
-    // Tear down the live streaming bubble — the canonical message is now in
+    // Tear down the live streaming bubble - the canonical message is now in
     // the list. Doing this in apply() (rather than just on the next start)
     // ensures the transient bubble doesn't stick around between turns.
     setStreamingText('');
@@ -419,7 +419,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={done ? 'Conversation ended — press reset' : 'Type a message...'}
+            placeholder={done ? 'Conversation ended - press reset' : 'Type a message...'}
             disabled={done || running || !startedRef.current}
             className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />

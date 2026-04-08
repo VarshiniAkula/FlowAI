@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: RouteParams): Promise<Metadat
   const { assistantId } = await params;
   const fallback: Metadata = {
     title: 'Chat',
-    description: 'Powered by FlowMind — visual AI assistant builder.',
+    description: 'Powered by FlowMind - visual AI assistant builder.',
     robots: { index: false, follow: false },
   };
 

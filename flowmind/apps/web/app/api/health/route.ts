@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
-// Always run fresh — health responses must reflect *current* dependency
+// Always run fresh - health responses must reflect *current* dependency
 // state, never an edge cache.
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,7 @@ interface Check {
  * Lightweight readiness probe used by deployment gates and uptime monitors.
  * Always returns JSON; HTTP status is 200 when everything's green and 503
  * when at least one critical dependency is failing. Supabase is checked by
- * issuing a HEAD-style count query against flowmind_published_assistants —
+ * issuing a HEAD-style count query against flowmind_published_assistants -
  * fast, indexed, and exercises both auth and the network path.
  */
 export async function GET() {

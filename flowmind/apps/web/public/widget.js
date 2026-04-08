@@ -48,7 +48,7 @@
   ready(function () {
     var script = findOwnScript();
     if (!script) {
-      // No tag found — silently noop so we never break the host page.
+      // No tag found - silently noop so we never break the host page.
       return;
     }
 

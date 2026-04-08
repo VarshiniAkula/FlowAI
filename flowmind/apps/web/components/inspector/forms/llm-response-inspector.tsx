@@ -55,7 +55,7 @@ export function LlmResponseInspector({ data, onChange }: Props) {
         >
           {MODELS.map((m) => (
             <option key={m.value} value={m.value}>
-              {m.label} — {m.subtitle}
+              {m.label} - {m.subtitle}
             </option>
           ))}
         </select>

@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: '*',
         allow: ['/', '/dashboard'],
         // The editor and per-assistant chat pages are intentionally hidden
-        // from crawlers — they're either user-data-bound or don't add SEO
+        // from crawlers - they're either user-data-bound or don't add SEO
         // value at scale.
         disallow: ['/editor/', '/chat/', '/api/'],
       },

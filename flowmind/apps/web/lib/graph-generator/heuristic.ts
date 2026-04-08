@@ -10,7 +10,7 @@ import type { GeneratedGraph } from './prompt';
 export function generateHeuristicGraph(story: string): GeneratedGraph {
   const text = story.toLowerCase();
 
-  // Detect archetype — check the most specific keywords first so a generic
+  // Detect archetype - check the most specific keywords first so a generic
   // word like "help" doesn't shadow a clearly-booking story.
   if (
     text.includes('appointment') ||
@@ -331,9 +331,9 @@ function feedbackBot(story: string): GeneratedGraph {
           prompt: 'How likely are you to recommend us to a friend?',
           variableName: 'nps',
           options: [
-            { id: 'opt_promoter', label: '9–10 — Loving it', value: 'promoter' },
-            { id: 'opt_passive', label: '7–8 — Pretty good', value: 'passive' },
-            { id: 'opt_detractor', label: '0–6 — Could be better', value: 'detractor' },
+            { id: 'opt_promoter', label: '9–10 - Loving it', value: 'promoter' },
+            { id: 'opt_passive', label: '7–8 - Pretty good', value: 'passive' },
+            { id: 'opt_detractor', label: '0–6 - Could be better', value: 'detractor' },
           ],
         },
       },
@@ -422,7 +422,7 @@ function bookingBot(story: string): GeneratedGraph {
         label: 'Confirm',
         position: { x: 0, y: 640 },
         data: {
-          text: 'Perfect — youre booked for a {{service}} on {{preferred_date}}. Confirmation will be sent to {{email}}.',
+          text: 'Perfect - youre booked for a {{service}} on {{preferred_date}}. Confirmation will be sent to {{email}}.',
         },
       },
     ],

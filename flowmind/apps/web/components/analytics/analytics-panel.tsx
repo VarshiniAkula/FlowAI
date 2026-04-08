@@ -134,7 +134,7 @@ export function AnalyticsPanel({ assistantId }: Props) {
   const findings: LintFinding[] = useMemo(() => {
     const out: LintFinding[] = [];
     if (nodes.length === 0) {
-      out.push({ level: 'warning', message: 'Canvas is empty — add at least one node to deploy.' });
+      out.push({ level: 'warning', message: 'Canvas is empty - add at least one node to deploy.' });
       return out;
     }
 
@@ -146,7 +146,7 @@ export function AnalyticsPanel({ assistantId }: Props) {
     if (startCandidates.length === 0) {
       out.push({
         level: 'error',
-        message: 'No start node found — every node has an incoming edge (cycle?).',
+        message: 'No start node found - every node has an incoming edge (cycle?).',
       });
     } else if (startCandidates.length > 1) {
       out.push({
@@ -173,7 +173,7 @@ export function AnalyticsPanel({ assistantId }: Props) {
     if (ragCount > 0 && documents.length === 0) {
       out.push({
         level: 'warning',
-        message: `${ragCount} RAG node${ragCount > 1 ? 's' : ''} but no documents uploaded — retrieval will return nothing.`,
+        message: `${ragCount} RAG node${ragCount > 1 ? 's' : ''} but no documents uploaded - retrieval will return nothing.`,
       });
     }
 
@@ -401,7 +401,7 @@ export function AnalyticsPanel({ assistantId }: Props) {
           <Section
             icon={<Network className="size-4" />}
             title="Connectivity"
-            subtitle="Reachability stats — useful for spotting orphaned branches."
+            subtitle="Reachability stats - useful for spotting orphaned branches."
           >
             <div className="grid gap-3 sm:grid-cols-3">
               <MiniStat
@@ -502,7 +502,7 @@ function LiveConversations({
         <div className="text-xs font-semibold">No conversations yet</div>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
           {published
-            ? 'Share your hosted link — the first visitor will show up here.'
+            ? 'Share your hosted link - the first visitor will show up here.'
             : 'Publish to cloud from the Deploy tab to start collecting data.'}
         </p>
       </div>

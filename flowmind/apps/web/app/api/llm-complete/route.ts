@@ -21,7 +21,7 @@ interface Body {
  *   visitors see tokens land as they're generated rather than after the whole
  *   answer arrives.
  *
- * Both modes degrade gracefully when `GEMINI_API_KEY` is missing — the stub
+ * Both modes degrade gracefully when `GEMINI_API_KEY` is missing - the stub
  * branch synthesizes a deterministic reply (and, in stream mode, fakes a
  * paced character-by-character drip so the UI streaming path is still
  * exercised end-to-end).
@@ -174,7 +174,7 @@ function sleep(ms: number): Promise<void> {
 function stubReply(systemPrompt: string, userPrompt: string): string {
   const sys = systemPrompt ? `(system: ${systemPrompt.slice(0, 80)}...) ` : '';
   return (
-    `${sys}This is a stub response — set GEMINI_API_KEY to enable real Gemini ` +
+    `${sys}This is a stub response - set GEMINI_API_KEY to enable real Gemini ` +
     `completions. You asked: "${userPrompt.slice(0, 200)}"`
   );
 }

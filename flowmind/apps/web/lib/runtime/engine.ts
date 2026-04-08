@@ -100,7 +100,7 @@ export async function runTurn(opts: RunTurnOptions): Promise<RunTurnResult> {
     currentId = result.nextNodeId;
   }
 
-  // Safety stop — we shouldn't fall through unless the graph has a loop.
+  // Safety stop - we shouldn't fall through unless the graph has a loop.
   trace.push(makeTrace('safety', 'engine', { error: 'max steps' }, {}, 0));
   state.currentNodeId = currentId;
   return { messages, state, trace, done: false };

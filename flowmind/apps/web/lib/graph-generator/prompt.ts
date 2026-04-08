@@ -33,7 +33,7 @@ Return ONLY valid JSON (no markdown fences, no commentary) matching this schema:
 
 # Node type data shapes
 
-- message: { "text": string }                       — sends a static message
+- message: { "text": string }                       - sends a static message
 - input:   { "prompt": string, "variableName": snake_case_string }
 - choice:  { "prompt": string, "variableName": string, "options": [{ "id": string, "label": string, "value": snake_case_string }] }
 - condition: { "expression": { "field": string, "operator": "eq"|"neq"|"gt"|"lt"|"gte"|"lte"|"contains"|"exists"|"matches", "value": any } }
@@ -63,7 +63,7 @@ Use {{variable_name}} interpolation in any text/prompt/template field. Variables
 2. Capture key user info via input or choice nodes BEFORE making decisions.
 3. For knowledge-grounded answers, pair rag_query (retrieves context) with llm_response (uses {{context}} variable).
 4. End every branch in either a final message or an llm_response.
-5. Never create dangling nodes — every non-terminal node must have at least one outgoing edge.
+5. Never create dangling nodes - every non-terminal node must have at least one outgoing edge.
 6. Use snake_case for all ids and variable names.
 7. Keep the graph focused: 4–10 nodes is ideal.
 

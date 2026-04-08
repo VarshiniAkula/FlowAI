@@ -54,6 +54,9 @@ export function HostedChat({ assistantId, embed = false }: Props) {
   const [assistant, setAssistant] = useState<Assistant | undefined>(undefined);
   const [cloudLoading, setCloudLoading] = useState(isCloudId);
   const [cloudError, setCloudError] = useState<string | null>(null);
+  // The owner-side assistantId from the published snapshot. We need it on the
+  // telemetry call so the Analytics page can aggregate across publish versions.
+  const ownerIdRef = useRef<string | null>(null);
 
   // Local-mode subscription (owner preview only). For cloud ids we just fetch
   // once on mount and treat the response as the source of truth.
@@ -87,6 +90,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
         }
         const data = (await res.json()) as PublishedPayload;
         if (cancelled) return;
+        ownerIdRef.current = data.assistantId;
         const publishedAt = Date.parse(data.publishedAt) || Date.now();
         const synthetic: Assistant = {
           id: data.id,
@@ -134,6 +138,48 @@ export function HostedChat({ assistantId, embed = false }: Props) {
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  // Telemetry: opaque conversation id assigned by /api/conversations on first
+  // start. Only set for cloud-published assistants (pub_*); local previews
+  // don't write any rows to Supabase.
+  const conversationIdRef = useRef<string | null>(null);
+  const telemetryDoneRef = useRef(false);
+
+  const beginTelemetry = async () => {
+    if (!isCloudId || conversationIdRef.current) return;
+    const ownerId = ownerIdRef.current;
+    if (!ownerId) return;
+    try {
+      const res = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          publishId: assistantId,
+          assistantId: ownerId,
+        }),
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { conversationId?: string };
+      if (data.conversationId) conversationIdRef.current = data.conversationId;
+    } catch {
+      // Telemetry is best-effort.
+    }
+  };
+
+  const reportTurn = async (isDone: boolean) => {
+    const id = conversationIdRef.current;
+    if (!id) return;
+    if (telemetryDoneRef.current) return;
+    if (isDone) telemetryDoneRef.current = true;
+    try {
+      await fetch(`/api/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnDelta: 1, done: isDone }),
+      });
+    } catch {
+      // Telemetry is best-effort.
+    }
+  };
 
   useEffect(() => {
     if (scrollerRef.current) {
@@ -146,9 +192,12 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     startedRef.current = true;
     setRunning(true);
     setError(null);
+    // Fire-and-forget telemetry: don't block the chat boot on the network round-trip.
+    void beginTelemetry();
     try {
       const result = await runTurn({ graph, state: createInitialState(), services });
       apply(result);
+      if (result.done) void reportTurn(true);
     } catch (err: any) {
       setError(err.message || 'Failed to start conversation');
     } finally {
@@ -169,6 +218,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     try {
       const result = await runTurn({ graph, state, userMessage: text, services });
       apply(result);
+      void reportTurn(result.done);
     } catch (err: any) {
       setError(err.message || 'Turn failed');
     } finally {
@@ -195,6 +245,9 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     setDone(false);
     setError(null);
     startedRef.current = false;
+    // Drop the previous conversation id so the next start() opens a fresh row.
+    conversationIdRef.current = null;
+    telemetryDoneRef.current = false;
   };
 
   // Auto-start once we have a non-empty graph.

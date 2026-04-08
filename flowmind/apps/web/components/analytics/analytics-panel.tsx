@@ -13,9 +13,12 @@ import {
   Network,
   FileText,
   Activity,
-  Hash,
+  CloudOff,
+  Users,
+  RefreshCw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { useKnowledgeStore } from '@/lib/knowledge/store';
 import { NODE_LABELS, NODE_COLORS, type NodeType } from '@flowmind/shared';
@@ -32,20 +35,33 @@ interface LintFinding {
   nodeId?: string;
 }
 
+interface AnalyticsSummary {
+  configured: boolean;
+  totalConversations: number;
+  activeConversations: number;
+  completedConversations: number;
+  totalTurns: number;
+  avgTurnsPerConversation: number;
+  conversationsLast24h: number;
+  byDay: Array<{ day: string; count: number }>;
+}
+
 /**
- * Phase 1 analytics: honest, builder-facing insights derived from local state.
- *
- * We don't have a runtime telemetry pipeline yet, so we surface the things
- * we *can* compute today: graph composition, knowledge inventory, and a
- * lint pass that catches structural problems before deploy. The "Live
- * conversations" card is a stub with a clear CTA so users understand
- * where production telemetry will land in Phase 2.
+ * Builder-facing analytics. Combines locally-derived static analysis (graph
+ * composition, knowledge inventory, structural lints) with live conversation
+ * telemetry pulled from Supabase via /api/analytics/[assistantId]. The
+ * aggregator rolls up across every publish version of the same owner-side
+ * assistant id, so renaming or republishing doesn't reset the dashboard.
  */
 export function AnalyticsPanel({ assistantId }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [assistant, setAssistant] = useState<Assistant | undefined>(undefined);
   const [documents, setDocuments] = useState<KnowledgeSource[]>([]);
   const [chunkCount, setChunkCount] = useState(0);
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryFetchedAt, setSummaryFetchedAt] = useState<number | null>(null);
 
   // Imperative subscriptions to avoid React 19 + Zustand persist snapshot issues.
   useEffect(() => {
@@ -73,6 +89,32 @@ export function AnalyticsPanel({ assistantId }: Props) {
       unsubA();
       unsubK();
     };
+  }, [assistantId]);
+
+  const loadSummary = async () => {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch(`/api/analytics/${encodeURIComponent(assistantId)}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
+      const data = (await res.json()) as AnalyticsSummary;
+      setSummary(data);
+      setSummaryFetchedAt(Date.now());
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : 'Failed to load');
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  // Fetch live conversation stats once we have the assistantId. The API
+  // returns a zeroed payload when Supabase isn't configured, so we always
+  // call it instead of branching on cloudPublishId.
+  useEffect(() => {
+    void loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assistantId]);
 
   const nodes = (assistant?.graph.nodes ?? []) as GraphNode[];
@@ -183,8 +225,8 @@ export function AnalyticsPanel({ assistantId }: Props) {
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Health checks, graph composition, and where your data lives. Live
-              conversation telemetry arrives in Phase 2.
+              Health checks, graph composition, and live conversation telemetry
+              from your cloud-published assistants.
             </p>
           </div>
         </div>
@@ -217,10 +259,17 @@ export function AnalyticsPanel({ assistantId }: Props) {
             sublabel={`${chunkCount} chunk${chunkCount === 1 ? '' : 's'} indexed`}
           />
           <StatCard
-            icon={<Hash className="size-4" />}
-            label="Variables"
-            value={variables.length.toString()}
-            sublabel={variables.length > 0 ? variables.map((v) => v.name).slice(0, 2).join(', ') : 'None defined'}
+            icon={<Users className="size-4" />}
+            label="Sessions"
+            value={(summary?.totalConversations ?? 0).toString()}
+            tone={summary && summary.totalConversations > 0 ? 'success' : undefined}
+            sublabel={
+              summary && summary.totalConversations > 0
+                ? `${summary.conversationsLast24h} in last 24h`
+                : variables.length > 0
+                  ? `${variables.length} variable${variables.length > 1 ? 's' : ''}`
+                  : 'No traffic yet'
+            }
           />
         </div>
 
@@ -310,21 +359,39 @@ export function AnalyticsPanel({ assistantId }: Props) {
             </Section>
           </div>
 
-          {/* Live conversations stub */}
+          {/* Live conversations */}
           <div className="lg:col-span-2">
             <Section
               icon={<TrendingUp className="size-4" />}
               title="Live conversations"
-              subtitle="Production telemetry."
+              subtitle={
+                summaryFetchedAt
+                  ? `Updated ${formatRelative(summaryFetchedAt)}`
+                  : 'Production telemetry from cloud-published chats.'
+              }
+              action={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void loadSummary()}
+                  disabled={summaryLoading}
+                  aria-label="Refresh"
+                >
+                  <RefreshCw
+                    className={cn(
+                      'size-3.5',
+                      summaryLoading && 'animate-spin',
+                    )}
+                  />
+                </Button>
+              }
             >
-              <div className="rounded-lg border border-dashed bg-gradient-to-br from-violet-50 to-pink-50 p-5 text-center dark:from-violet-950/20 dark:to-pink-950/20">
-                <Sparkles className="mx-auto mb-2 size-5 text-violet-500" />
-                <div className="text-xs font-semibold">Coming in Phase 2</div>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                  Once you connect a backend, this card will surface session counts,
-                  drop-off rates, and per-node latency.
-                </p>
-              </div>
+              <LiveConversations
+                summary={summary}
+                loading={summaryLoading}
+                error={summaryError}
+                published={Boolean(assistant?.cloudPublishId)}
+              />
             </Section>
           </div>
         </div>
@@ -366,11 +433,13 @@ function Section({
   icon,
   title,
   subtitle,
+  action,
   children,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -383,10 +452,120 @@ function Section({
             <p className="mt-0.5 text-[11px] text-muted-foreground">{subtitle}</p>
           )}
         </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </div>
   );
+}
+
+function LiveConversations({
+  summary,
+  loading,
+  error,
+  published,
+}: {
+  summary: AnalyticsSummary | null;
+  loading: boolean;
+  error: string | null;
+  published: boolean;
+}) {
+  if (loading && !summary) {
+    return (
+      <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
+        Loading...
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-3 text-xs text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-200">
+        {error}
+      </div>
+    );
+  }
+  if (!summary || !summary.configured) {
+    return (
+      <div className="rounded-lg border border-dashed bg-gradient-to-br from-violet-50 to-pink-50 p-5 text-center dark:from-violet-950/20 dark:to-pink-950/20">
+        <CloudOff className="mx-auto mb-2 size-5 text-violet-500" />
+        <div className="text-xs font-semibold">Cloud telemetry off</div>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          Configure Supabase to start collecting hosted-chat metrics.
+        </p>
+      </div>
+    );
+  }
+  if (summary.totalConversations === 0) {
+    return (
+      <div className="rounded-lg border border-dashed bg-muted/20 p-5 text-center">
+        <Sparkles className="mx-auto mb-2 size-5 text-violet-500" />
+        <div className="text-xs font-semibold">No conversations yet</div>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          {published
+            ? 'Share your hosted link — the first visitor will show up here.'
+            : 'Publish to cloud from the Deploy tab to start collecting data.'}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <MiniStat
+          label="Total"
+          value={summary.totalConversations.toString()}
+          sublabel="all-time"
+        />
+        <MiniStat
+          label="Last 24h"
+          value={summary.conversationsLast24h.toString()}
+          sublabel="new sessions"
+        />
+        <MiniStat
+          label="Active"
+          value={summary.activeConversations.toString()}
+          sublabel="in progress"
+        />
+        <MiniStat
+          label="Avg turns"
+          value={summary.avgTurnsPerConversation.toString()}
+          sublabel="per chat"
+        />
+      </div>
+      {summary.byDay.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Last {summary.byDay.length} day{summary.byDay.length === 1 ? '' : 's'}
+          </div>
+          <DaySpark byDay={summary.byDay} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DaySpark({ byDay }: { byDay: Array<{ day: string; count: number }> }) {
+  const max = Math.max(1, ...byDay.map((d) => d.count));
+  return (
+    <div className="flex h-12 items-end gap-1">
+      {byDay.map((d) => (
+        <div
+          key={d.day}
+          title={`${d.day}: ${d.count} conversation${d.count === 1 ? '' : 's'}`}
+          className="flex-1 rounded-sm bg-gradient-to-t from-violet-500 to-pink-500"
+          style={{ height: `${Math.max(6, (d.count / max) * 100)}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function formatRelative(ts: number): string {
+  const delta = Date.now() - ts;
+  if (delta < 5_000) return 'just now';
+  if (delta < 60_000) return `${Math.floor(delta / 1000)}s ago`;
+  if (delta < 3_600_000) return `${Math.floor(delta / 60_000)}m ago`;
+  return `${Math.floor(delta / 3_600_000)}h ago`;
 }
 
 function StatCard({

@@ -128,16 +128,42 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     [assistant?.graph.nodes, assistant?.graph.edges, assistant?.graph.variables],
   );
 
-  const services = useMemo(() => createSimulatorServices(assistantId), [assistantId]);
+  const baseServices = useMemo(() => createSimulatorServices(assistantId), [assistantId]);
 
   const [state, setState] = useState<ConversationState>(() => createInitialState());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [streamingText, setStreamingText] = useState('');
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // Wrap the simulator services so any llm_response node in the running graph
+  // streams its tokens into `streamingText`. The engine itself still resolves
+  // the full string when complete() returns; we just paint the deltas in real
+  // time as a transient bubble that gets replaced by the canonical assistant
+  // message once the turn settles via apply().
+  const services = useMemo(
+    () => ({
+      ...baseServices,
+      llm: {
+        complete: (opts: Parameters<typeof baseServices.llm.complete>[0]) => {
+          // Reset the streaming bubble at the start of each LLM call so
+          // multi-llm flows show one bubble per call rather than concatenating.
+          setStreamingText('');
+          return baseServices.llm.complete({
+            ...opts,
+            onChunk: (delta) => {
+              setStreamingText((prev) => prev + delta);
+            },
+          });
+        },
+      },
+    }),
+    [baseServices],
+  );
   // Telemetry: opaque conversation id assigned by /api/conversations on first
   // start. Only set for cloud-published assistants (pub_*); local previews
   // don't write any rows to Supabase.
@@ -185,7 +211,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
     if (scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight;
     }
-  }, [messages, running]);
+  }, [messages, running, streamingText]);
 
   const start = async () => {
     if (graph.nodes.length === 0) return;
@@ -236,12 +262,17 @@ export function HostedChat({ assistantId, embed = false }: Props) {
         content: m.content,
       })),
     ]);
+    // Tear down the live streaming bubble — the canonical message is now in
+    // the list. Doing this in apply() (rather than just on the next start)
+    // ensures the transient bubble doesn't stick around between turns.
+    setStreamingText('');
     setDone(result.done);
   };
 
   const reset = () => {
     setState(createInitialState());
     setMessages([]);
+    setStreamingText('');
     setDone(false);
     setError(null);
     startedRef.current = false;
@@ -359,7 +390,10 @@ export function HostedChat({ assistantId, embed = false }: Props) {
           {messages.map((m) => (
             <Bubble key={m.id} role={m.role} content={m.content} />
           ))}
-          {running && (
+          {streamingText && (
+            <Bubble role="assistant" content={streamingText} streaming />
+          )}
+          {running && !streamingText && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3 animate-spin" /> Thinking...
             </div>
@@ -414,7 +448,15 @@ export function HostedChat({ assistantId, embed = false }: Props) {
   );
 }
 
-function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string }) {
+function Bubble({
+  role,
+  content,
+  streaming = false,
+}: {
+  role: 'user' | 'assistant';
+  content: string;
+  streaming?: boolean;
+}) {
   const isUser = role === 'user';
   return (
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
@@ -424,9 +466,16 @@ function Bubble({ role, content }: { role: 'user' | 'assistant'; content: string
           isUser
             ? 'bg-gradient-to-br from-violet-600 to-pink-600 text-white'
             : 'border bg-card text-foreground',
+          streaming && 'border-violet-300/60 dark:border-violet-700/60',
         )}
       >
         {content}
+        {streaming && (
+          <span
+            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-violet-500"
+            aria-hidden="true"
+          />
+        )}
       </div>
     </div>
   );

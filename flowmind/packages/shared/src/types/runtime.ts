@@ -60,6 +60,18 @@ export interface RuntimeServices {
     query: (query: string, topK: number) => Promise<RetrievedChunk[]>;
   };
   llm: {
-    complete: (opts: { systemPrompt: string; userPrompt: string; temperature?: number }) => Promise<string>;
+    complete: (opts: {
+      systemPrompt: string;
+      userPrompt: string;
+      temperature?: number;
+      /**
+       * Optional token-level callback. When provided, the service will request
+       * a streaming completion from the underlying provider and invoke
+       * `onChunk` for each delta. The promise still resolves with the full
+       * concatenated text once the stream finishes, so callers that ignore
+       * `onChunk` continue to work unchanged.
+       */
+      onChunk?: (delta: string) => void;
+    }) => Promise<string>;
   };
 }

@@ -14,7 +14,7 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [db.pooler]
 enabled = false
@@ -47,11 +47,8 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
-# Extensions enabled for FlowMind. pgvector + pgcrypto + pg_trgm match production.
-[db.extensions]
-vector = true
-pgcrypto = true
-pg_trgm = true
+# Extensions (vector, pgcrypto, pg_trgm) are enabled inline in
+# supabase/migrations/0001_init.sql via `create extension if not exists`.
 
 [functions.ingest-document]
 verify_jwt = false

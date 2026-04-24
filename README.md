@@ -20,7 +20,7 @@ legacy demo project — create your own.
    `flowmind-dev` (or any name — only yours).
 2. Copy `flowmind/apps/web/.env.example` to `flowmind/apps/web/.env.local` and fill in:
    - `NEXT_PUBLIC_SUPABASE_URL` — project URL
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon/publishable key
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — publishable key (sb_publishable_...)
    - `SUPABASE_SERVICE_ROLE_KEY` — service role key (server only; never commit)
    - `GEMINI_API_KEY`, `NEXT_PUBLIC_APP_URL`
 3. From `flowmind/`, apply migrations:

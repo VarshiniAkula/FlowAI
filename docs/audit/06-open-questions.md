@@ -1,98 +1,139 @@
-# Audit 06 — Open questions (blocking Phase 1)
+# Audit 06 — Open questions (status)
 
-These are decisions or facts the spec, prompt pack, and Phase 0 prompt do not pin down. Phase 1 cannot start until each is answered.
-
----
-
-## Q1. Existing Supabase project: fresh schema or coexist with legacy tables?
-
-**Context.** The currently deployed Vercel app (`flowmind-nine-tau.vercel.app`) is wired to a Supabase project that contains two ad-hoc tables: `flowmind_published_assistants` and `flowmind_conversations`. Neither has `org_id`, neither matches the spec C schema, and both are anon-writable per the comment in `lib/supabase/server.ts`.
-
-**Options.**
-- **(a) Fresh project.** Create a new Supabase project for the multi-tenant schema; leave the legacy project for the demo URL until Phase 6 cuts over. Cleanest, but requires a new env var rotation and means the demo URL is unchanged-but-stale during Phases 1–5.
-- **(b) Same project, parallel tables.** Add the spec C tables alongside the legacy `flowmind_*` tables in the same Supabase project. RLS on new tables is unaffected by the old ones. After Phase 6, drop the legacy tables.
-- **(c) Same project, replace.** Migration `0001_init.sql` includes `DROP TABLE IF EXISTS flowmind_published_assistants, flowmind_conversations` at the top. Live demo breaks for the duration.
-
-**Recommendation.** Option (b). Keeps the live demo working through Phases 1–5, decouples Phase 6's cutover from the schema rollout. Migration `0007_drop_legacy.sql` removes them at the end of Phase 6.
-
-**Decision needed:** which option? Plus, **which Supabase project URL/keys go into `.env.example` and the team's local `.env`?** If a fresh project, please provision and share the URL.
+Tracking the seven Phase 0 questions and their resolutions. **Phase 1 is unblocked** (Q1, Q2, Q3, Q5 all answered).
 
 ---
 
-## Q2. Bootstrapping the first owner membership
+## Q1. Supabase project — RESOLVED ✅
 
-**Context.** Spec E says memberships are written only by owner/admin. Phase 2 task 4 says onboarding creates an org + the owner membership transactionally via the user-scoped client. With RLS on, the very first `memberships` insert for that org would have no existing owner to authorize it.
+**Decision (2026-04-23):** Create a fresh Supabase project named `flowmind-dev`. Do **not** touch the existing Supabase project that powers the live demo. Project ID/URL/keys are stored in a local `.env.local` file that is gitignored — never committed.
 
-**Resolution path.** Add a SECURITY DEFINER SQL function `public.bootstrap_organization(p_name text, p_slug text)` invoked from the onboarding server action. It inserts both rows atomically with `created_by = auth.uid()` and `role = 'owner'`. The RLS policy then trusts the function's elevated privileges.
-
-**Decision needed:** OK with this approach? Any preference for where the function lives (`0005_profiles_trigger.sql` vs a new `0006_bootstrap_org.sql`)?
-
----
-
-## Q3. Member invitations: pending row vs Supabase magic link
-
-**Context.** Phase 2 task 5: "Invite member by email — creates a `pending_invite` row OR sends a Supabase magic link — pick one and document".
-
-**Trade-offs.**
-- **Magic link.** No new table; Supabase emails the invitee a sign-in link with org context encoded in `redirectTo`. After they sign in, a server action checks the pending invite token and inserts the membership. Works only if the invitee can register (Supabase auth allows new accounts via magic-link flow).
-- **Pending invites table.** Add `invitations(id, org_id, email, role, token, expires_at, created_by)`. Email is sent via a transactional provider (we don't have one wired). On sign-up, the post-auth callback joins on email and consumes the row.
-
-**Recommendation.** Magic link for MVP. No transactional email provider needed; uses the Supabase auth email. Tradeoff: invite UX is "sign in to accept", not "click → land on org settings".
-
-**Decision needed:** confirm magic link, or add an email provider and use the table approach?
+**Implications.**
+- Phase 1 migrations target the fresh project.
+- The live demo at `flowmind-nine-tau.vercel.app` continues serving from the legacy Supabase project, untouched, throughout Phases 1–6.
+- No `0007_drop_legacy.sql` migration is needed (the legacy tables aren't in our project).
+- `.env.example` documents the variables; `.env.local` (gitignored) holds the actual fresh-project values.
+- README "Local setup" must instruct: "create your own Supabase project at supabase.com, copy URL + keys into `flowmind/apps/web/.env.local`."
 
 ---
 
-## Q4. In-editor preview path during Phase 3 → Phase 5 transition
+## Q2. Bootstrap of first owner membership — RESOLVED ✅
 
-**Context.** `components/chat/hosted-chat.tsx` today supports two ids: `pub_*` (cloud) and anything-else (owner localStorage preview). After Phase 3 deletes `useAssistantStore`, the localStorage branch is broken. But the test chat endpoint (Phase 5) doesn't exist yet at the end of Phase 3.
+**Decision (2026-04-23):** Use `SECURITY DEFINER` for `bootstrap_organization()` — and **only** that function. Any future `SECURITY DEFINER` requires explicit approval.
 
-**Options.**
-- **(a) Delete preview at the end of Phase 3.** The Test tab in the editor breaks for one phase; users see an "Available in Phase 5" notice.
-- **(b) Defer hosted-chat changes to Phase 5.** During Phase 3, hosted chat keeps reading `useAssistantStore`, which after Phase 3 is empty (no localStorage writes). The editor's Test tab becomes useless until Phase 5.
+**Function contract (binding for Phase 2):**
+```sql
+create or replace function public.bootstrap_organization(p_name text, p_slug text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_org_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'UNAUTHENTICATED' using errcode = '42501';
+  end if;
+  insert into organizations (name, slug, created_by)
+    values (p_name, p_slug, auth.uid())
+    returning id into new_org_id;
+  insert into memberships (org_id, user_id, role)
+    values (new_org_id, auth.uid(), 'owner');
+  return new_org_id;
+end;
+$$;
 
-**Recommendation.** (a) — show a clear placeholder in the Test tab that says "Test chat is enabled in Phase 5; the runtime is being moved to a server endpoint with grounded retrieval and citations." Avoids confusion and broken UI.
+revoke execute on function public.bootstrap_organization(text, text) from public;
+grant  execute on function public.bootstrap_organization(text, text) to authenticated;
+```
 
-**Decision needed:** confirm (a)?
-
----
-
-## Q5. Vercel plan + ingestion timeout budget
-
-**Context.** Spec section I says ingestion runs async via `waitUntil`. On Vercel:
-- Hobby: function max 10s; `waitUntil` adds another ≤30s.
-- Pro: function max 60s; `waitUntil` adds another ≤300s.
-
-A 25 MB PDF can take >30s to extract+chunk+embed (especially the 100-batch embedding round-trips). On Hobby, ingestion would silently truncate.
-
-**Decision needed:**
-- (a) What plan is the production deploy on? (Memory says the deploy works; doesn't say which plan.)
-- (b) Are we OK lowering the per-file size limit on Hobby to ~5 MB until upgrade, or do we require Pro for the MVP?
-- (c) Alternative: kick the heavy lifting to a Supabase Edge Function instead of Vercel `waitUntil`. Adds complexity but unblocks Hobby.
-
----
-
-## Q6. Custom domain or `vercel.app` for `NEXT_PUBLIC_APP_URL`?
-
-**Context.** The hosted chat URL and embed snippet bake in `NEXT_PUBLIC_APP_URL`. If you publish today and tomorrow swap to a custom domain, every existing embed snippet on customer sites breaks.
-
-**Decision needed:** what is the canonical production URL for embeds? Is `flowmind-nine-tau.vercel.app` the long-term URL, or should we hold off until a custom domain is available? Recommend: lock a domain (or commit to the vercel.app URL) before Phase 6.
+Lives in `supabase/migrations/0006_bootstrap_org.sql` (separate from the profiles trigger).
 
 ---
 
-## Q7. Profile fields beyond `email`
+## Q3. Member invitations — RESOLVED ✅
 
-**Context.** Spec C says `profiles.full_name` and `profiles.avatar_url` come from `raw_user_meta_data` if present. Email/password signup doesn't capture these. Magic-link signup doesn't either.
+**Decision (2026-04-23):** Use a `pending_invitations` table (named `invitations` in the schema). **No email sending in Phase 2** — the invite UI displays the invite URL for the admin to copy. Email send-site carries `TODO(phase-7): send invite email`.
 
-**Decision needed:**
-- (a) Leave nullable; user fills them out post-signup in a "Profile" page (not in spec).
-- (b) Capture `full_name` on the signup form; leave `avatar_url` null.
-- (c) Skip the profile UX entirely for MVP; rely on `email` only.
+**Schema (added to spec section C):**
+```
+invitations(
+  id uuid pk,
+  org_id uuid,
+  email text,
+  role text check (role in ('admin','member','viewer')),  -- NO 'owner'
+  invited_by uuid,
+  token text unique,                                       -- 32-char base62 from crypto.randomBytes
+  expires_at timestamptz default now() + interval '7 days',
+  accepted_at timestamptz,
+  created_at timestamptz default now()
+)
+-- partial unique: (org_id, email) where accepted_at is null
+```
 
-Recommendation: (b). One field on signup, no avatar upload UI.
+**Acceptance flow.** `/accept-invite?token=...` page validates `expires_at > now()` and `accepted_at IS NULL`, requires the user to sign in or sign up, inserts the membership for `(org_id, auth.uid(), role)`, sets `accepted_at = now()`.
+
+**Owner is not invitable.** Owner role is granted only via the transfer-ownership flow.
 
 ---
 
-## Once these are answered
+## Q4. In-editor preview during Phase 3 → Phase 5 — DEFERRED (blocking Phase 3)
 
-Phase 1 can begin immediately. Open questions Q1, Q2, Q3, Q5 are blocking; Q4, Q6, Q7 are blocking only at the phase that needs them (Q4 → Phase 3; Q6 → Phase 6; Q7 → Phase 2). Please answer Q1/Q2/Q3/Q5 before we start writing migrations.
+Recommendation in the original audit was: at the end of Phase 3, replace the editor's Test tab with a placeholder ("Test chat is enabled in Phase 5") until Phase 5 ships the authenticated `test-chat` endpoint.
+
+**Status:** awaiting confirmation. Not blocking Phase 1 or Phase 2.
+
+---
+
+## Q5. Vercel timeout budget for ingestion — RESOLVED ✅
+
+**Decision (2026-04-23):** Vercel Hobby plan. `waitUntil` (30s) is insufficient for 25 MB PDFs. Move heavy ingestion off Vercel into a Supabase Edge Function (`ingest-document`, Deno).
+
+**Architecture (binding for Phase 4):**
+- `POST /api/knowledge/ingest` (Next.js): validates auth + role, sets `documents.status = 'processing'`, invokes `ingest-document` via `supabase.functions.invoke()`, returns 202 in **under 1 second**.
+- `supabase/functions/ingest-document/index.ts` (Deno): downloads from Storage, extracts, chunks, embeds, bulk-inserts, updates status. All heavy lifting lives here.
+
+**Library choices for Deno (binding):**
+- PDF: `pdfjs-dist` (WASM) — **not** `pdf-parse`.
+- DOCX: `npm:mammoth`.
+- HTML: `npm:node-html-parser` or `deno-dom`.
+- Tokenizer: `npm:gpt-tokenizer`.
+- Gemini: direct `fetch` to the REST API; no SDK.
+
+**No duplicate logic.** `lib/ingest/process.ts` in the Next.js app is a thin invoker. Extraction/chunking/embedding code does not exist on the Next.js side. CI grep guard: those library names must NOT appear in `flowmind/apps/web/`.
+
+**Local dev.** `supabase functions serve ingest-document --env-file ./supabase/.env.local`. Documented in README.
+
+**Updated Phase 4 acceptance checks:**
+- `/api/knowledge/ingest` returns 202 in < 1s regardless of file size.
+- Edge Function logs show extraction/chunking/embedding completing.
+- A 25 MB PDF reaches `status = 'ready'` within 3 minutes.
+
+Spec section I and prompt pack Phase 4 have been rewritten to reflect this. See [docs/flowmind-spec.md](docs/flowmind-spec.md#i-knowledge-ingestion) and [docs/flowmind-prompt-pack.md](docs/flowmind-prompt-pack.md) Phase 4.
+
+---
+
+## Q6. Production URL for `NEXT_PUBLIC_APP_URL` — DEFERRED (blocking Phase 6)
+
+Still open. Recommendation stands: lock a domain (custom or `vercel.app`) before Phase 6 so embed snippets don't break later.
+
+---
+
+## Q7. Profile fields beyond `email` — DEFERRED (blocking Phase 2)
+
+Still open. Recommendation: capture `full_name` on the signup form, leave `avatar_url` null. Awaiting confirmation.
+
+---
+
+## Phase 1 readiness
+
+| Question | Status |
+|---|---|
+| Q1 fresh Supabase project | ✅ |
+| Q2 bootstrap function | ✅ |
+| Q3 invitations | ✅ (consumed in Phase 2, not Phase 1, but schema lands in Phase 1 migration) |
+| Q5 Edge Function ingestion | ✅ (consumed in Phase 4) |
+| Q4 / Q6 / Q7 | Deferred — not blocking Phase 1 |
+
+**Phase 1 can begin** once the fresh Supabase project is provisioned and `flowmind/apps/web/.env.local` is populated.

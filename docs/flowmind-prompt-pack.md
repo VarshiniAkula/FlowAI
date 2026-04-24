@@ -347,7 +347,9 @@ Non-goals:
 ```
 [Shared Preamble]
 
-This is Phase 4: end-to-end knowledge ingestion. This is the longest phase — be disciplined about committing after each task. Do not skip Task 8 (testing) — broken ingestion is the highest-risk failure mode in this product.
+This is Phase 4: end-to-end knowledge ingestion, executed off-Vercel via a Supabase Edge Function. This is the longest phase — be disciplined about committing after each task. Do not skip Task 9 (testing) — broken ingestion is the highest-risk failure mode in this product.
+
+**Architecture (binding).** The Next.js host is on Vercel Hobby; the 10s function + 30s `waitUntil` budget cannot ingest a 25 MB PDF. Heavy ingestion runs in a Supabase Edge Function (Deno) called `ingest-document`. The Next.js `/api/knowledge/ingest` route is a thin invoker that returns 202 in under a second. **Do NOT duplicate extraction/chunking/embedding logic between Next.js and the Edge Function.** All pipeline code lives in `supabase/functions/ingest-document/index.ts`. `lib/ingest/process.ts` in the Next.js app is a thin client that calls `supabase.functions.invoke('ingest-document', { body: { documentId } })`.
 
 Tasks:
 
@@ -362,69 +364,79 @@ Tasks:
 
 2. Client upload: the knowledge manager UI calls the upload-url route, then PUTs the file directly to Supabase Storage using the signed URL, then calls `POST /api/knowledge/ingest` with the `documentId` to kick off processing. Show progress and never write file contents to localStorage.
 
-3. Server route `POST /api/knowledge/ingest`:
+3. Next.js route `POST /api/knowledge/ingest` (thin invoker — must return in < 1s):
    - Validates auth + org + role
    - Loads the `documents` row; rejects if already in `processing` or `ready`
-   - Sets `status = 'processing'`
-   - Returns 202 Accepted immediately
-   - Triggers the ingestion pipeline via `waitUntil(processDocument(documentId))` (if on Vercel) or via a direct async call with proper error isolation. Document the execution model clearly in code comments — this is a common place to accidentally block the request.
+   - Sets `documents.status = 'processing'`
+   - Calls `supabase.functions.invoke('ingest-document', { body: { documentId } })` using the service-role client. **Do not await the function's full response** — use the fire-and-forget pattern (`.invoke()` returns once the function has been queued; we ignore the eventual result and rely on `documents.status` polling instead). If the invoke call itself fails, revert `documents.status` to `pending` and surface the error.
+   - Returns `202 Accepted` immediately
+   - Code comment must call out that this route owns ZERO ingestion logic — read-only validation + invoke + status flip.
 
-4. Build the extraction pipeline `lib/ingest/extract.ts`:
-   - Downloads the file via the service-role client from private storage
-   - Dispatches by MIME/extension:
-     - `.txt`, `.md` — raw UTF-8 read
-     - `.html` — strip tags, keep text (use `node-html-parser` or similar; preserve headings as line breaks)
-     - `.csv` — read as text; join rows with newlines; include header row
-     - `.pdf` — `pdf-parse`; capture page boundaries in metadata
-     - `.docx` — `mammoth.extractRawText`
-   - Returns `{ text: string, pages?: Array<{ page: number; text: string }> }`
-   - On failure: sets `documents.status = 'failed'` with a user-readable error message and re-throws
+4. Build the Edge Function `supabase/functions/ingest-document/index.ts` (Deno). This is the only place extraction/chunking/embedding logic lives. Sub-modules in `supabase/functions/ingest-document/_lib/` for: `extract.ts`, `chunk.ts`, `embed.ts`, `db.ts`. Function flow:
+   - Auth: receive a service-role client built from the function's `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` secrets. Reject the request if the body is missing `documentId` or if the env is missing.
+   - Load the `documents` row, fetch the file from the private `knowledge-files` bucket (`storage.from('knowledge-files').download(storage_path)`).
+   - Extract text by extension:
+     - `.txt`, `.md`, `.csv` — raw UTF-8 read; for CSV, include header row.
+     - `.html` — `npm:node-html-parser` or `deno-dom`; strip script/style; preserve heading line breaks.
+     - `.pdf` — `pdfjs-dist` (WASM, Deno-native). Capture page boundaries in metadata. **Do NOT use `pdf-parse` — it does not run in Deno.**
+     - `.docx` — `npm:mammoth` (`extractRawText`).
+   - Chunk:
+     - Normalize whitespace (collapse runs, trim).
+     - Use `npm:gpt-tokenizer` to count tokens accurately. Target 1000 tokens per chunk with 150-token overlap.
+     - Break on paragraph or sentence boundaries where possible.
+     - Preserve metadata per chunk: `{ documentId, filename, sourceType, pageNumber?, chunkIndex }`.
+     - Skip chunks under 50 chars.
+   - Embed:
+     - Direct `fetch` to `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents` (no SDK). Use `taskType: 'RETRIEVAL_DOCUMENT'`.
+     - Batches up to 100 chunks per request.
+     - Exponential backoff retry on 429/5xx (max 3 retries).
+     - 768-dim vectors expected; verify dimension before insert.
+     - If `GEMINI_API_KEY` (function secret) is missing: fail loudly with a `LLM_KEY_MISSING` error written into `documents.error` — do not silently stub.
+   - Insert: bulk insert `document_chunks` rows (org_id, assistant_id, document_id, chunk_index, content, token_count, embedding, metadata) via the service-role client, batches of 100.
+   - On success: `documents.status = 'ready'`, `knowledge_sources.status = 'ready'`, insert `usage_events { event_type: 'document_ingested', metadata: { chunkCount, totalTokens } }`.
+   - On failure at any stage: mark `documents` and `knowledge_sources` as `failed` with the user-readable error message; cleanup any partially-inserted chunks for this `documentId`.
 
-5. Build the chunker `lib/ingest/chunk.ts`:
-   - Normalizes whitespace (collapse runs of whitespace, trim)
-   - Targets ~1000 tokens per chunk with ~150 token overlap — use a token counter like `tiktoken` or `gpt-tokenizer` (Gemini tokens aren't publicly counted; approximate via characters: 1 token ≈ 4 chars → ~4000 chars per chunk, ~600 char overlap)
-   - Tries to break on paragraph or sentence boundaries
-   - Preserves metadata per chunk: `{ documentId, filename, sourceType, pageNumber?, chunkIndex }`
-   - Skips chunks under 50 chars (likely junk)
+5. Configure the Edge Function:
+   - Add `supabase/functions/ingest-document/deno.json` (imports map for npm: specifiers and pdfjs-dist).
+   - Set function secrets: `SUPABASE_SERVICE_ROLE_KEY` (auto-injected by Supabase platform), `GEMINI_API_KEY` (set via `supabase secrets set GEMINI_API_KEY=...`). Document both in README.
+   - Set `verify_jwt = false` in `supabase/config.toml` for this function so the Next.js service-role invoker can call it; security comes from the Next.js route already authenticating the user before invoking.
 
-6. Build the embedder `lib/ingest/embed.ts`:
-   - Calls Gemini `text-embedding-004` with `taskType: RETRIEVAL_DOCUMENT` for ingestion
-   - Batches up to 100 chunks per request to respect API limits
-   - Retries with exponential backoff on 429/5xx
-   - Returns `number[][]` of 768-dim vectors in input order
-   - If `GEMINI_API_KEY` is missing: fails loudly, does not silently skip
+6. Build `lib/ingest/process.ts` in the Next.js app — **thin client only**:
+   - Single export: `async function dispatchIngest(documentId: string): Promise<void>`.
+   - Wraps `supabase.functions.invoke('ingest-document', { body: { documentId } })` with typed error handling.
+   - No extraction, no chunking, no embedding code lives in this file. Add a banner comment forbidding it.
 
-7. Wire the pipeline `lib/ingest/process.ts` → `processDocument(documentId)`:
-   - extract → chunk → embed → insert `document_chunks` rows with `org_id`, `assistant_id`, `document_id`, `chunk_index`, `content`, `token_count`, `embedding`, `metadata`
-   - Use a single bulk insert (or batches of 100) via the service-role client
-   - On success: `documents.status = 'ready'`, `knowledge_sources.status = 'ready'`
-   - On failure at any stage: mark both as `failed` with the error message; do not leave orphan chunks (wrap in a cleanup)
-   - Emits a `usage_events` row: `event_type = 'document_ingested'`, metadata includes chunk count + total tokens
-
-8. Verification tests (add to `scripts/verify-ingest.ts`):
-   - Upload a sample .md file (check in a fixture) → ingestion completes → `document_chunks` rows exist with embeddings → dimensions == 768
-   - Upload the SAME file to a different org's assistant → chunks are isolated (query with org A's client cannot see org B's chunks)
-   - Upload an unsupported file type → rejected at upload-url step
-   - Upload a 30 MB file → rejected for size
-   - Corrupt file / empty file → `status = 'failed'` with clear error
-   - Upload 101 files → the 101st is rejected with a clear error
-
-9. Knowledge manager UI updates:
+7. Knowledge manager UI updates:
    - Replace the existing localStorage-backed knowledge list with a server-component list from `documents` for the current assistant
    - Show status badges: pending / processing / ready / failed (with error on hover)
    - Poll every 3 seconds while any document is in `pending` or `processing` state
    - Delete button → server action that removes chunks, document row, and storage file
    - Update copy: only claim the file types actually supported (.txt, .md, .csv, .html, .pdf, .docx). Remove "website crawling" if it's in the current UI.
 
-10. Update `.env.example` and README with GEMINI_API_KEY setup instructions and a note about embedding dimensions being tied to the DB schema.
+8. Update `.env.example` and README:
+   - `GEMINI_API_KEY` setup, embedding-dimensions tied to DB schema
+   - "Local Edge Functions" section: install Supabase CLI, run `supabase start`, then in a separate terminal `supabase functions serve ingest-document --env-file ./supabase/.env.local`. Document the `.env.local` shape (`GEMINI_API_KEY=...`).
+
+9. Verification tests `scripts/verify-ingest.ts`:
+   - Upload a sample .md file fixture → POST /api/knowledge/ingest returns 202 in < 1s → poll `documents.status` until `ready` → `document_chunks` rows exist with 768-dim embeddings.
+   - Upload the SAME file to a different org's assistant → chunks are isolated (query with org A's client cannot see org B's chunks).
+   - Upload an unsupported file type → rejected at upload-url step.
+   - Upload a 30 MB file → rejected for size.
+   - Corrupt file / empty file → `status = 'failed'` with clear error.
+   - Upload 101 files → the 101st is rejected with `FILE_LIMIT_REACHED`.
+   - Latency assertion: `/api/knowledge/ingest` must return `202` in under 1000 ms regardless of file size (run with a 25 MB fixture).
 
 Acceptance checks:
-- A 5-page PDF uploads, processes, and shows `ready` within 60 seconds on local dev.
+- `POST /api/knowledge/ingest` returns 202 in **under 1 second** regardless of file size (the route does no extraction/chunking/embedding work).
+- Edge Function logs (visible via `supabase functions logs ingest-document` or the dashboard) show extraction, chunking, and embedding stages completing for a successful run.
+- A 25 MB PDF reaches `documents.status = 'ready'` within 3 minutes (conservative ceiling for the Edge Function).
+- A 5-page PDF reaches `documents.status = 'ready'` within 60 seconds on local dev.
 - Ingested chunks have 768-dim embeddings in `document_chunks`.
 - Cross-org isolation verified by `verify-ingest.ts`.
 - Unsupported file types, oversized files, and corrupt files all fail with user-visible errors.
 - No file content is ever written to localStorage.
 - The signed upload URL works from the browser without the service role key ever touching the client.
+- `lib/ingest/process.ts` is < 30 lines and contains zero extraction/chunking/embedding logic (grep guard in CI: extraction libraries like `pdfjs-dist`, `mammoth`, `gpt-tokenizer` must NOT appear in `flowmind/apps/web/`).
 
 Non-goals:
 - No retrieval yet (Phase 5).

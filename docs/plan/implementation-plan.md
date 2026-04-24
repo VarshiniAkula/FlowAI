@@ -17,6 +17,8 @@ Conventions:
 - `+ flowmind/supabase/migrations/0002_indexes.sql` — HNSW + B-tree + uniques per spec D
 - `+ flowmind/supabase/migrations/0003_rls.sql` — `is_org_member()`, `org_role()`, all policies per spec E
 - `+ flowmind/supabase/migrations/0004_storage.sql` — `knowledge-files` private bucket + `storage.objects` RLS
+- `+ flowmind/supabase/migrations/0005_invitations.sql` — `invitations` table + RLS (owner/admin can insert+select+delete; anon can select-by-token-only via the accept-invite endpoint, or done entirely via service role from the Next.js route)
+- `+ flowmind/supabase/migrations/0006_bootstrap_org.sql` — `bootstrap_organization(p_name text, p_slug text)` SECURITY DEFINER function per Q2 resolution
 - `+ flowmind/apps/web/lib/supabase/server.ts` — **rewrite** of existing file: cookie-bound `@supabase/ssr` client, `import 'server-only'`
 - `+ flowmind/apps/web/lib/supabase/service.ts` — service-role client behind a `createServiceClient()` function, `import 'server-only'`
 - `+ flowmind/apps/web/lib/supabase/browser.ts` — anon client for auth flows
@@ -34,8 +36,9 @@ Conventions:
 - `~ flowmind/apps/web/lib/supabase/server.ts` — current anon-key file is **replaced** by the `@supabase/ssr` cookie-bound version above. Existing routes that import `getSupabaseServerClient`/`isSupabaseConfigured` keep compiling because the public chat / publish / conversations routes will be rewritten in later phases; for Phase 1 the helper exports those names too as a thin shim, then the shim is removed in Phase 6 once those routes are rebuilt.
 
 ### Risks / unknowns
-- **Existing Supabase project state**: there's a live Supabase project (per memory: `flowmind-nine-tau.vercel.app` already deployed) with `flowmind_published_assistants` and `flowmind_conversations` tables outside the migration system. We need to decide between (a) starting a fresh Supabase project for the new schema and dropping the old data, or (b) treating the existing tables as legacy alongside the new schema. See open question Q1.
+- **Fresh Supabase project (Q1 resolved)**: Phase 1 targets a brand-new `flowmind-dev` Supabase project. The legacy Supabase project powering `flowmind-nine-tau.vercel.app` is NOT touched. `.env.local` holds the new project's URL + keys; `.env.local` is gitignored. `.env.example` lists the variable names only.
 - **`@supabase/ssr` cookie API breaking changes**: pinning `@supabase/ssr` to a known-good minor version. The middleware split (request-cookie pass-through vs response cookie set) is the most common bug source.
+- **SECURITY DEFINER hygiene**: `bootstrap_organization` is the only SECURITY DEFINER function approved. Migration 0006 must include `SET search_path = public`, an `auth.uid() IS NOT NULL` check, `REVOKE EXECUTE FROM public`, and `GRANT EXECUTE TO authenticated` — verified in the verify-rls script.
 
 ---
 
@@ -46,12 +49,15 @@ Conventions:
 - `+ flowmind/apps/web/app/(auth)/login/page.tsx`
 - `+ flowmind/apps/web/app/(auth)/signup/page.tsx`
 - `+ flowmind/apps/web/app/(auth)/logout/route.ts`
-- `+ flowmind/apps/web/app/onboarding/page.tsx` + `actions.ts` (org create transaction)
+- `+ flowmind/apps/web/app/onboarding/page.tsx` + `actions.ts` — calls `supabase.rpc('bootstrap_organization', { p_name, p_slug })` from a server action with the user-scoped client (Q2)
+- `+ flowmind/apps/web/app/accept-invite/page.tsx` + `actions.ts` — Q3: validates `token`, requires sign-in or sign-up, inserts membership, stamps `accepted_at`
+- `+ flowmind/apps/web/lib/db/invitations.ts` — typed CRUD for invites (create with random 32-char base62 token, list pending for org, revoke, accept). Email send-site is a `TODO(phase-7)` comment.
+- `+ flowmind/apps/web/components/org/invite-member-form.tsx` — form + post-submit display of the copyable invite URL (no email send)
 - `+ flowmind/apps/web/app/(app)/layout.tsx` — wraps the authenticated shell; replaces or wraps `app/layout.tsx` for the protected segment
 - `+ flowmind/apps/web/app/(app)/settings/organization/page.tsx` (members, role changes, transfer ownership) + `actions.ts`
 - `+ flowmind/apps/web/components/org/org-switcher.tsx`
 - `+ flowmind/apps/web/lib/auth/active-org.ts` — `getActiveOrg()` cookie reader/validator
-- `+ flowmind/supabase/migrations/0005_profiles_trigger.sql`
+- `+ flowmind/supabase/migrations/0007_profiles_trigger.sql` (renumbered — 0005/0006 land in Phase 1)
 
 ### Files to modify
 - `~ flowmind/apps/web/app/layout.tsx` — strip authenticated chrome where it clashes with `(app)/layout.tsx`
@@ -62,8 +68,9 @@ Conventions:
 - None — UI surfaces stay localStorage-backed until Phase 3.
 
 ### Risks / unknowns
-- **Onboarding transaction**: Phase 2 task 4 says "create org + owner membership in a single transaction via a server action using the user-scoped client". With RLS enabled, the user-scoped client can't insert into `organizations` unless we explicitly allow `insert by any authed user` (spec E item 1) — covered. But the `memberships` row references the new org id and must include `role='owner'`, which the policy "writes only by owner/admin" would block on first insert. Solution per spec: bootstrap the first membership inside a SECURITY DEFINER function (call it `bootstrap_organization(name, slug)`) that does both inserts atomically. Document this in Phase 2 task 4. Open question Q2.
-- **Invite-by-email flow**: spec H3 says "members list … invite by email"; prompt pack Phase 2 task 5 says "creates a pending_invite row OR sends a Supabase magic link — pick one and document". Recommend magic-link-only for MVP (no `invitations` table needed). Open question Q3.
+- **Onboarding transaction (Q2 resolved)**: server action calls `supabase.rpc('bootstrap_organization', { p_name, p_slug })` shipped in Phase 1. No new SECURITY DEFINER allowed in Phase 2.
+- **Invite UX (Q3 resolved)**: `invitations` table-backed (schema in Phase 1), no email send in Phase 2. UI displays the copyable invite URL after creating the row. Email integration deferred to Phase 7.
+- **Profile fields (Q7 still open)**: signup form currently planned to capture only email + password. If Q7 confirms `full_name` capture, add a single field to the signup form.
 
 ---
 
@@ -94,35 +101,49 @@ Conventions:
 
 ---
 
-## Phase 4 — Knowledge ingestion
+## Phase 4 — Knowledge ingestion (Supabase Edge Function architecture)
 
-### Files to create
+Q5 resolution: heavy ingestion runs **off Vercel** in a Supabase Edge Function (Deno). The Next.js route is a thin invoker that returns 202 in < 1s. **No extraction/chunking/embedding code lives in the Next.js app.**
+
+### Files to create — Next.js side (thin invoker only)
 - `+ flowmind/apps/web/app/api/knowledge/upload-url/route.ts` — POST: validate + signed upload URL + insert pending `documents`/`knowledge_sources` rows
-- `+ flowmind/apps/web/app/api/knowledge/ingest/route.ts` — POST: 202 + `waitUntil(processDocument(...))`
-- `+ flowmind/apps/web/lib/ingest/extract.ts` — dispatch by extension (.txt/.md/.csv/.html/.pdf/.docx)
-- `+ flowmind/apps/web/lib/ingest/chunk.ts` — replaces in-browser BM25 chunker; ~4000-char windows, ~600-char overlap, paragraph/sentence breaks, ≥50 chars
-- `+ flowmind/apps/web/lib/ingest/embed.ts` — Gemini `text-embedding-004` batches of 100
-- `+ flowmind/apps/web/lib/ingest/process.ts` — `processDocument()` wiring
-- `+ flowmind/apps/web/scripts/verify-ingest.ts` — fixture upload + cross-org isolation tests
+- `+ flowmind/apps/web/app/api/knowledge/ingest/route.ts` — POST: validates auth + role, sets `documents.status='processing'`, fires `supabase.functions.invoke('ingest-document', { body: { documentId } })`, returns 202. Must complete in < 1s.
+- `+ flowmind/apps/web/lib/ingest/process.ts` — < 30 LOC thin client. Single export `dispatchIngest(documentId)` wrapping `functions.invoke`. Banner comment forbids extraction/chunking/embedding logic.
+- `+ flowmind/apps/web/scripts/verify-ingest.ts` — fixture upload + cross-org isolation + < 1s 202 latency assertion + 25 MB PDF readiness within 3 min
 - `+ flowmind/apps/web/scripts/fixtures/sample.md` — for verify-ingest
+- `+ flowmind/apps/web/scripts/fixtures/sample-25mb.pdf` (or generated at test time) — for the latency assertion
+
+### Files to create — Edge Function side (single source of truth)
+- `+ flowmind/supabase/functions/ingest-document/index.ts` — Deno entry; flow controller
+- `+ flowmind/supabase/functions/ingest-document/_lib/extract.ts` — dispatch by extension. PDF via `pdfjs-dist` (WASM), DOCX via `npm:mammoth`, HTML via `npm:node-html-parser` or `deno-dom`, `.txt`/`.md`/`.csv` raw UTF-8.
+- `+ flowmind/supabase/functions/ingest-document/_lib/chunk.ts` — `npm:gpt-tokenizer`, 1000-token target, 150-token overlap, paragraph/sentence breaks, ≥50 char skip
+- `+ flowmind/supabase/functions/ingest-document/_lib/embed.ts` — direct `fetch` to `text-embedding-004:batchEmbedContents`, batches of 100, exp backoff, dim=768 verification, fail-loud on missing `GEMINI_API_KEY`
+- `+ flowmind/supabase/functions/ingest-document/_lib/db.ts` — service-role client + bulk insert helpers + status updates + cleanup
+- `+ flowmind/supabase/functions/ingest-document/deno.json` — imports map for npm: specifiers and pdfjs-dist
+- `+ flowmind/supabase/.env.local.example` — `GEMINI_API_KEY=...` template; the real `.env.local` is gitignored
 
 ### Files to modify
+- `~ flowmind/supabase/config.toml` — `[functions.ingest-document] verify_jwt = false` (security comes from the Next.js route's auth check before invoking)
 - `~ flowmind/apps/web/components/knowledge/knowledge-manager.tsx` — replace `useKnowledgeStore` reads with server-fetched documents prop; delete inline upload that hit `/api/parse-document`; add status polling every 3s while pending/processing; cascade-delete confirmation
 - `~ flowmind/apps/web/app/editor/[assistantId]/knowledge/page.tsx` — convert to server component, fetch `documents` for assistant, pass into manager
-- `~ flowmind/apps/web/.env.example` + `README.md` — `GEMINI_API_KEY` setup, embedding-dimensions warning
-- `~ flowmind/apps/web/components/landing/hero.tsx` — remove the "Upload PDFs, crawl websites" copy claiming website crawling
-- `~ flowmind/packages/shared/src/types/assistant.ts` — `KnowledgeSource.type` union currently `'website' | 'sitemap' | 'upload'`; replace with `'file' | 'url' | 'text' | 'api'` to match spec C; status enum to `'pending' | 'processing' | 'ready' | 'failed'`
+- `~ flowmind/apps/web/.env.example` + `README.md` — `GEMINI_API_KEY` setup (note: also set as Supabase secret `supabase secrets set GEMINI_API_KEY=...`); embedding-dimensions warning; "Local Edge Functions" section explaining `supabase functions serve ingest-document --env-file ./supabase/.env.local`
+- `~ flowmind/apps/web/components/landing/hero.tsx` — remove "Upload PDFs, crawl websites" claim
+- `~ flowmind/packages/shared/src/types/assistant.ts` — `KnowledgeSource.type` union to `'file' | 'url' | 'text' | 'api'`; status enum to `'pending' | 'processing' | 'ready' | 'failed'`
 
 ### Replaced/removed
 - `- flowmind/apps/web/app/api/parse-document/route.ts` — superseded by the upload-url + ingest pair
 - `- flowmind/apps/web/lib/knowledge/store.ts` — superseded; remove after import-legacy path is in place
 - `- flowmind/apps/web/lib/knowledge/search.ts` — superseded by Phase 5 retrieval
-- `- flowmind/apps/web/lib/knowledge/chunker.ts` — superseded by `lib/ingest/chunk.ts`
+- `- flowmind/apps/web/lib/knowledge/chunker.ts` — superseded by Edge Function chunker
+- **No ingestion libraries in the Next.js app**: `pdfjs-dist`, `pdf-parse`, `mammoth`, `node-html-parser`, `gpt-tokenizer`, `tiktoken` MUST NOT appear in `flowmind/apps/web/package.json`. CI grep guard enforces this.
 
 ### Risks / unknowns
-- **`pdf-parse` on Vercel**: this package has historical "test PDF in node_modules" issues (`./test/data/05-versions-space.pdf` ENOENT). Plan: `pdf-parse@1.1.1` works if imported as `pdf-parse/lib/pdf-parse.js` to dodge the index file's debug branch. Document the import shape in Phase 4 task 4.
-- **`waitUntil` runtime**: only available in `nodejs` runtime, not `edge`. All ingest routes must declare `export const runtime = 'nodejs'`.
-- **Storage signed-upload-URL TTL**: Supabase signed upload URLs expire (default 2h). Document client-side fallback if upload races past TTL.
+- **`pdfjs-dist` in Deno**: import the legacy build or the worker-less ESM build to avoid Web Worker/canvas dependencies. Test on a 25 MB scanned PDF (worst case for memory).
+- **Edge Function cold start**: first invocation after deploy can take 3–5s. The Next.js route returns 202 immediately, so user-facing latency is unaffected; the only impact is the time-to-`ready`. Acceptance check (3 min for 25 MB) leaves plenty of headroom.
+- **Edge Function concurrency**: Supabase free tier limits concurrent function invocations. Document the limit in README "Known limitations".
+- **Storage signed-upload-URL TTL**: Supabase signed upload URLs default to 2h. Document client-side fallback if upload races past TTL.
+- **Local dev requires `supabase functions serve` running in a separate terminal**: README must call this out. Add a `pnpm dev:functions` script (root) that wraps it.
+- **Function secrets**: `GEMINI_API_KEY` must be set both as a Supabase Function secret (`supabase secrets set`) and locally in `supabase/.env.local`. README documents both.
 
 ---
 
@@ -217,5 +238,5 @@ Conventions:
 2. **Two-app monorepo turbo cache**: the `apps/*` glob would pick up new packages cleanly, but we need to ensure `verify:*` scripts run from `flowmind/apps/web/` and not via `turbo run` (turbo would cache them and not re-execute against a live DB).
 3. **Tailwind 4 beta**: app uses `tailwindcss@^4.0.0-beta.8`. New auth/onboarding pages will need to follow whatever Tailwind 4 conventions are already established. No spec impact, but worth flagging.
 4. **React 19 + zustand persist instability**: tracked in audit 02. Removing persist (Phase 3, Phase 4) likely resolves it. If not, the `import-legacy` flow in Phase 3 may need an alternative read path.
-5. **Vercel function timeout**: default 10s on Hobby, 60s on Pro. PDF ingestion + embedding for a 25 MB PDF can exceed this even with `waitUntil`. The spec already chose async + `waitUntil`, but `waitUntil` itself caps at 30s on Vercel Hobby. Verify project plan and document. Open question Q5.
+5. **Vercel function timeout (Q5 resolved)**: ingestion no longer runs on Vercel — it lives in a Supabase Edge Function (Deno). The Next.js `/api/knowledge/ingest` route is a thin invoker that returns 202 in < 1s. Risk shifted to Edge Function cold-start + concurrency; tracked in the Phase 4 risks section above.
 6. **Cookie domain across subdomains**: production deploy at `flowmind-nine-tau.vercel.app` — `flowmind-active-org` cookie scope is fine for a single domain. If a custom domain is added, document the cookie domain choice.

@@ -34,14 +34,16 @@ These are binding. Changing any of them requires updating this spec, the prompt 
 | Chunk target size | ~1000 tokens (~4000 chars) |
 | Chunk overlap | ~150 tokens (~600 chars) |
 | Validation | Zod on every server boundary |
-| PDF extraction | `pdf-parse` |
-| DOCX extraction | `mammoth` |
-| HTML extraction | `node-html-parser` or equivalent safe parser |
+| PDF extraction | `pdfjs-dist` (WASM, runs in the Deno Edge Function — `pdf-parse` is incompatible with Deno) |
+| DOCX extraction | `npm:mammoth` (in the Deno Edge Function) |
+| HTML extraction | `npm:node-html-parser` or `deno-dom` (in the Deno Edge Function) |
+| Tokenizer | `npm:gpt-tokenizer` (Deno Edge Function) |
+| Gemini SDK on Deno | Direct `fetch` to the Gemini REST API; no SDK needed inside the Edge Function |
 | File types supported at MVP | `.txt`, `.md`, `.csv`, `.html`, `.pdf`, `.docx` |
 | URL / website ingestion | **Out of scope for MVP.** UI must not claim support. |
 | File size limit | 25 MB per upload |
 | File count limit | 100 files per assistant (MVP) |
-| Ingestion execution model | Async. Upload returns immediately; processing runs in a background route handler; UI polls `document.status`. |
+| Ingestion execution model | Async, off-Vercel. The Next.js `/api/knowledge/ingest` route validates auth, sets `documents.status = 'processing'`, invokes Supabase Edge Function `ingest-document` via `supabase.functions.invoke()`, and returns 202 in under one second regardless of file size. The Edge Function (Deno) does extraction, chunking, embedding, and bulk insert. UI polls `document.status`. (Vercel Hobby's 10s function + 30s `waitUntil` budget cannot ingest a 25 MB PDF; the Edge Function is the only place the heavy work runs.) |
 | Upload path | Client uploads directly to Supabase Storage using a signed upload URL issued by a server route |
 | Public chat session | Client generates a UUID `sessionId`, persists in widget-local `sessionStorage` for continuity (not authoritative) |
 | Public chat rate limits | 30 req/min per (IP + sessionId); 1000 req/day per published assistant |
@@ -166,6 +168,20 @@ Create Supabase migrations for the following tables. Use UUID primary keys unles
 - `role text not null check (role in ('owner', 'admin', 'member', 'viewer'))`
 - `created_at timestamptz default now()`
 - `unique(org_id, user_id)`
+
+#### invitations
+- `id uuid primary key default gen_random_uuid()`
+- `org_id uuid references organizations(id) on delete cascade`
+- `email text not null`
+- `role text not null check (role in ('admin', 'member', 'viewer'))` -- **no `owner`** (owner is granted only via transfer-ownership flow)
+- `invited_by uuid references auth.users(id) on delete set null`
+- `token text not null unique` -- 32-char base62 from `crypto.randomBytes`, used in the invite URL; unguessable
+- `expires_at timestamptz not null default (now() + interval '7 days')`
+- `accepted_at timestamptz` -- set when the invitee signs in and consumes the token
+- `created_at timestamptz default now()`
+- Partial unique index `(org_id, email) where accepted_at is null` -- prevents duplicate pending invites; allows re-inviting after acceptance
+
+> **Phase 2 invite UX (no email sending in Phase 2).** The org settings page renders the invite URL (`{NEXT_PUBLIC_APP_URL}/accept-invite?token={token}`) for the admin to copy and send manually. Wherever the invite is created, leave a comment: `TODO(phase-7): send invite email here`. Phase 7 wires up an email provider.
 
 #### assistants
 - `id uuid primary key default gen_random_uuid()`
@@ -324,7 +340,7 @@ Template definitions live in `lib/templates/index.ts` as plain data, not DB rows
 
 1. Current org selector in the app header. Selected org stored in a cookie named `flowmind-active-org` (not `localStorage`).
 2. Create organization flow at `/onboarding`.
-3. Organization settings page with members list, role changes, remove member, transfer ownership.
+3. Organization settings page with members list, role changes, remove member, transfer ownership, and **invite member by email**: creates a row in `invitations` with role ∈ {admin, member, viewer} and a 32-char base62 token; the page displays the invite URL `{NEXT_PUBLIC_APP_URL}/accept-invite?token=...` for the admin to copy. No email is sent in Phase 2 — code site of the would-be email send carries `TODO(phase-7): send invite email`. Acceptance of an invite signs in or signs up the invitee, validates `expires_at > now()` and `accepted_at IS NULL`, inserts the membership, and stamps `accepted_at = now()`.
 4. Always validate the cookie-selected org against real membership server-side.
 5. If the user has no org, show onboarding.
 
@@ -340,12 +356,29 @@ Supported MVP file types: `.txt`, `.md`, `.csv`, `.html`, `.pdf`, `.docx`. URL /
 4. Client PUTs the file directly to Supabase Storage using the signed URL.
 5. Client calls `POST /api/knowledge/ingest` with `{ documentId }`.
 
-**Ingestion pipeline (async):**
+**Ingestion pipeline (async, off-Vercel via Supabase Edge Function):**
 
-1. `POST /api/knowledge/ingest` validates auth + role, marks `documents.status = 'processing'`, returns 202, and triggers `processDocument(documentId)` via `waitUntil` or equivalent background execution.
-2. `processDocument` downloads the file via the service-role client, extracts text, chunks, embeds, and bulk-inserts `document_chunks` with `org_id` and `assistant_id`.
-3. On success: `documents.status = 'ready'`, `knowledge_sources.status = 'ready'`, emit `usage_events { event_type: 'document_ingested' }`.
-4. On failure at any stage: `documents.status = 'failed'` with a user-readable error message. No orphan chunks.
+The Next.js host (Vercel Hobby) cannot finish a 25 MB PDF inside its 10s function + 30s `waitUntil` budget. Heavy ingestion lives in a Supabase Edge Function instead. The Next.js route is a thin invoker.
+
+1. `POST /api/knowledge/ingest` (Next.js route handler):
+   - Validates auth, org membership, role >= member, and that the `documentId` belongs to the caller's org.
+   - Rejects if `documents.status` is already `processing` or `ready`.
+   - Sets `documents.status = 'processing'`.
+   - Invokes the Supabase Edge Function `ingest-document` via `supabase.functions.invoke('ingest-document', { body: { documentId } })`.
+   - Returns `202 Accepted` in **under one second**, regardless of file size. Does **not** await the Edge Function's completion.
+2. Supabase Edge Function `ingest-document` (Deno, in `supabase/functions/ingest-document/index.ts`):
+   - Authenticates with the Supabase service-role key (set as the function's secret).
+   - Loads the `documents` row, downloads the file from the private `knowledge-files` bucket.
+   - Extracts text by extension: `pdfjs-dist` (PDF, WASM), `npm:mammoth` (DOCX), `npm:node-html-parser` or `deno-dom` (HTML), raw UTF-8 (`.txt`, `.md`, `.csv`).
+   - Chunks via `npm:gpt-tokenizer` to count tokens accurately.
+   - Embeds with Gemini `text-embedding-004` via direct `fetch` to the REST API (no SDK in Deno).
+   - Bulk-inserts `document_chunks` rows with `org_id` and `assistant_id` (resolved from the `documents` row, never from input).
+   - On success: sets `documents.status = 'ready'`, `knowledge_sources.status = 'ready'`, emits `usage_events { event_type: 'document_ingested' }`.
+   - On failure at any stage: sets `documents.status = 'failed'` and `knowledge_sources.status = 'failed'` with a user-readable error message; runs a cleanup so no orphan chunks remain.
+
+**Single source of truth.** Extraction, chunking, and embedding live **only** in the Edge Function. `lib/ingest/process.ts` in the Next.js app is a thin client that just calls `supabase.functions.invoke()` — do not duplicate the pipeline in TypeScript-on-Node and Deno.
+
+**Local development.** Edge Functions run locally via `supabase functions serve ingest-document --env-file ./supabase/.env.local`. The README documents starting both `pnpm dev` and `supabase functions serve` side-by-side. The Next.js `supabase.functions.invoke()` automatically routes to the local function when `NEXT_PUBLIC_SUPABASE_URL` points at the local Supabase URL.
 
 **Chunking requirements:**
 

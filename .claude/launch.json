@@ -2,18 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "FlowAI Backend",
-      "runtimeExecutable": "uvicorn",
-      "runtimeArgs": ["server:app", "--reload", "--app-dir", "flowchat"],
-      "port": 8000
-    },
-    {
-      "name": "FlowAI Frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "flowchat/frontend"],
-      "port": 5173
-    },
-    {
       "name": "FlowMind Web",
       "runtimeExecutable": "./flowmind/dev.sh",
       "runtimeArgs": [],

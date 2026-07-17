@@ -45,17 +45,17 @@ the UI**. Phases 2–7 connect them.
 Monorepo at the repo root (`pnpm` + `turbo`):
 
 ```
-FlowAI/
+FlowAI/                          # repository root (product = FlowMind)
 ├── docs/                        # spec, prompt pack, audit, plan, this file
-├── flowchat/                    # OLD Python/React prototype — not the active product
 └── flowmind/                    # ACTIVE product (Next.js monorepo)
     ├── apps/web/                # the Next.js 15 app (everything below lives here)
     ├── packages/shared/         # shared TS types, node-type constants, Zod validators
     └── supabase/                # migrations, config (Phase 1)
 ```
 
-- **`flowchat/`** is a legacy Python prototype. Ignore it for current work.
 - **`flowmind/apps/web/`** is the live implementation.
+- An older Python/React prototype (formerly `flowchat/`, once called "FlowChat") was
+  **removed** from the repo; it's recoverable from git history if ever needed.
 - A **live demo** runs at `flowmind-nine-tau.vercel.app`, served from a **legacy Supabase
   project** that is intentionally left untouched by the new work.
 

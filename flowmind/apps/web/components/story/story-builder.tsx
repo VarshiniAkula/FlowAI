@@ -109,11 +109,11 @@ export function StoryBuilder({ assistantId }: Props) {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-violet-950/5">
+    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-indigo-950/5">
       <div className="mx-auto max-w-3xl px-6 py-10">
         {/* Header */}
         <div className="mb-8 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-pink-600 text-white shadow-lg">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-lg">
             <BookOpenText className="size-6" />
           </div>
           <div>
@@ -126,11 +126,11 @@ export function StoryBuilder({ assistantId }: Props) {
         </div>
 
         {/* Story input */}
-        <Card className="overflow-hidden border-violet-500/10">
-          <div className="border-b bg-gradient-to-r from-violet-500/5 to-pink-500/5 px-5 py-3">
+        <Card className="overflow-hidden border-indigo-500/10">
+          <div className="border-b bg-gradient-to-r from-indigo-500/5 to-indigo-500/5 px-5 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Sparkles className="size-4 text-violet-500" />
+                <Sparkles className="size-4 text-indigo-500" />
                 <span className="text-sm font-medium">Tell us about your assistant</span>
               </div>
               <span className="text-[10px] text-muted-foreground">
@@ -202,11 +202,11 @@ export function StoryBuilder({ assistantId }: Props) {
               <button
                 key={ex.title}
                 onClick={() => setStory(ex.body)}
-                className="group rounded-xl border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md"
+                className="group rounded-xl border bg-card p-4 text-left transition-all hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
               >
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold">{ex.title}</h3>
-                  <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-violet-500" />
+                  <ArrowRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-indigo-500" />
                 </div>
                 <p className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">
                   {ex.body}

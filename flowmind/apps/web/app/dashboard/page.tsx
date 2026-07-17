@@ -90,13 +90,15 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-muted/20">
-      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-violet-600 to-pink-600 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Brain className="size-4" />
             </div>
-            <span className="font-semibold">FlowMind</span>
+            <span className="font-display text-lg font-bold tracking-tight">
+              FlowMind
+            </span>
             <Badge variant="outline" className="ml-2">
               Dashboard
             </Badge>
@@ -127,7 +129,9 @@ export default function DashboardPage() {
         <section className="mb-10">
           <div className="mb-4 flex items-end justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Start from a template</h2>
+              <h2 className="font-display text-2xl font-bold tracking-tight">
+                Start from a template
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Pre-built flows you can customize
               </p>
@@ -145,7 +149,7 @@ export default function DashboardPage() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t.description}
                 </p>
-                <div className="mt-3 flex items-center gap-1 text-xs text-violet-600 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="mt-3 flex items-center gap-1 text-xs text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100">
                   Use template <ArrowUpRight className="size-3" />
                 </div>
               </button>
@@ -157,7 +161,9 @@ export default function DashboardPage() {
         <section>
           <div className="mb-4 flex items-end justify-between">
             <div>
-              <h2 className="text-xl font-semibold">Your assistants</h2>
+              <h2 className="font-display text-2xl font-bold tracking-tight">
+                Your assistants
+              </h2>
               <p className="text-sm text-muted-foreground">
                 {!mounted
                   ? '\u00a0'
@@ -170,7 +176,7 @@ export default function DashboardPage() {
 
           {filtered.length === 0 ? (
             <Card className="flex flex-col items-center justify-center gap-4 border-dashed py-16">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-pink-100 text-violet-600">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-primary">
                 <Sparkles className="size-7" />
               </div>
               <div className="text-center">
@@ -193,7 +199,7 @@ export default function DashboardPage() {
                 >
                   <Card className="h-full p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
                     <div className="mb-3 flex items-start justify-between">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-pink-500 text-white">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-primary">
                         <Workflow className="size-5" />
                       </div>
                       <Badge
@@ -236,7 +242,9 @@ export default function DashboardPage() {
             className="w-full max-w-md p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold">Create assistant</h3>
+            <h3 className="font-display text-lg font-bold tracking-tight">
+              Create assistant
+            </h3>
             <p className="text-sm text-muted-foreground">
               Give it a name and a short description
             </p>

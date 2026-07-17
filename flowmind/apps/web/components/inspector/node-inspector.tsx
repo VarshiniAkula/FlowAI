@@ -99,7 +99,7 @@ export function NodeInspector() {
       <div className="flex items-start justify-between gap-2 border-b px-4 py-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="size-3.5 text-violet-500" />
+            <Sparkles className="size-3.5 text-indigo-500" />
             <Badge variant="info" className="text-[10px]">
               {NODE_LABELS[node.type]}
             </Badge>

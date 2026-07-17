@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flowmind-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@flowmind/web", "dev"],
+      "port": 3000
+    }
+  ]
+}

@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-background via-background to-violet-950/5 px-6 py-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-background via-background to-indigo-950/5 px-6 py-12">
       <div className="w-full max-w-md text-center">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-300">
           <Compass className="size-7" />
         </div>
         <h1 className="text-2xl font-bold tracking-tight">Page not found</h1>

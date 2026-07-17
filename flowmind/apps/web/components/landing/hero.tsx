@@ -2,7 +2,17 @@
 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Sparkles, Workflow, Database, Zap } from 'lucide-react';
+import {
+  ArrowRight,
+  Sparkles,
+  Workflow,
+  Database,
+  Zap,
+  Bot,
+  Search,
+  BrainCircuit,
+  MessageSquare,
+} from 'lucide-react';
 
 const features = [
   {
@@ -21,7 +31,7 @@ const features = [
     icon: Database,
     title: 'Knowledge Grounding',
     description:
-      'Upload PDFs, crawl websites. RAG with citations using pgvector + hybrid search.',
+      'Upload PDFs and documents. RAG with citations using pgvector semantic search.',
   },
   {
     icon: Zap,
@@ -33,66 +43,118 @@ const features = [
 
 export function Hero() {
   return (
-    <div className="relative overflow-hidden bg-gradient-to-b from-background via-background to-muted/30">
-      {/* Decorative gradient orbs */}
+    <div className="relative overflow-hidden">
+      {/* Soft ambient wash — Electric Indigo, kept subtle. */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-40 top-20 h-96 w-96 rounded-full bg-violet-500/20 blur-3xl" />
-        <div className="absolute -right-40 top-40 h-96 w-96 rounded-full bg-fuchsia-500/20 blur-3xl" />
-        <div className="absolute left-1/3 top-1/2 h-96 w-96 rounded-full bg-pink-500/10 blur-3xl" />
+        <div className="absolute -right-32 -top-24 h-[32rem] w-[32rem] rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute -left-40 top-1/3 h-96 w-96 rounded-full bg-indigo-400/5 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto max-w-6xl px-6 py-24 sm:py-32">
-        <div className="text-center">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-background/60 px-4 py-1.5 text-xs font-medium backdrop-blur">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-            v0.5 - Streaming, hosted chats, live analytics
+      <div className="relative mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <div className="grid items-center gap-12 lg:grid-cols-2">
+          {/* Left: copy */}
+          <div>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-secondary px-4 py-1.5 text-xs font-semibold text-primary">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-mint opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-mint" />
+              </span>
+              FlowMind v0.5 is now live
+            </div>
+
+            <h1 className="font-display text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+              Ship <span className="text-primary">Grounded</span> AI Assistants
+              in Minutes.
+            </h1>
+            <p className="mt-5 max-w-xl text-balance text-lg text-muted-foreground">
+              The visual platform to design, debug, and deploy assistants that
+              answer from your own documents. Drag nodes to build the
+              conversation, watch every turn stream in real time, and publish a
+              hosted chat in one click.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button asChild size="lg" variant="gradient">
+                <Link href="/dashboard">
+                  Start Building Free <ArrowRight className="size-5" />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="#features">See features</Link>
+              </Button>
+            </div>
+
+            <p className="mt-8 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Trusted by builders shipping real assistants
+            </p>
           </div>
 
-          <h1 className="text-5xl font-bold tracking-tight sm:text-7xl">
-            <span className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 bg-clip-text text-transparent">
-              FlowMind
-            </span>
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-balance text-lg text-muted-foreground sm:text-xl">
-            Design, debug, and ship AI assistants on a visual canvas. Drag
-            nodes to build the conversation, ground answers in your own
-            documents, watch every turn stream in real time, and publish a
-            hosted chat in one click.
-          </p>
+          {/* Right: product-preview card */}
+          <div className="relative">
+            <div className="rounded-lg border border-border bg-card p-6 shadow-lift">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-primary">
+                    <Bot className="size-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Customer Support Bot</p>
+                    <p className="flex items-center gap-1.5 text-xs text-mint">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-mint" />
+                      Online
+                    </p>
+                  </div>
+                </div>
+                <Sparkles className="size-4 text-muted-foreground" />
+              </div>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <Button asChild size="xl" variant="gradient">
-              <Link href="/dashboard">
-                Open Dashboard <ArrowRight className="size-5" />
-              </Link>
-            </Button>
-            <Button asChild size="xl" variant="outline">
-              <Link href="#features">See features</Link>
-            </Button>
+              <div className="mt-6 grid grid-cols-2 gap-3">
+                <div className="rounded-md border border-border bg-background p-3">
+                  <Search className="mb-2 size-4 text-primary" />
+                  <p className="text-xs font-semibold">Knowledge Search</p>
+                </div>
+                <div className="rounded-md border border-border bg-background p-3">
+                  <BrainCircuit className="mb-2 size-4 text-primary" />
+                  <p className="text-xs font-semibold">Intent Analysis</p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-center gap-2 rounded-md bg-secondary px-3 py-2 text-xs font-semibold text-primary">
+                <MessageSquare className="size-3.5" />
+                Generate Response
+              </div>
+            </div>
           </div>
         </div>
 
-        <div
-          id="features"
-          className="mt-24 grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {features.map((f) => (
-            <div
-              key={f.title}
-              className="group relative overflow-hidden rounded-xl border bg-card p-6 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5"
-            >
-              <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 text-violet-600">
-                <f.icon className="size-5" />
+        {/* Features */}
+        <div id="features" className="mt-28">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="font-display text-3xl font-bold tracking-tight sm:text-4xl">
+              Intelligence that scales with you.
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              Stop writing brittle logic flows. FlowMind grounds every answer in
+              your knowledge base and handles complex conversations naturally.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {features.map((f) => (
+              <div
+                key={f.title}
+                className="group rounded-lg border border-border bg-card p-6 shadow-soft transition-all hover:-translate-y-0.5 hover:shadow-lift"
+              >
+                <div className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-md bg-secondary text-primary">
+                  <f.icon className="size-5" />
+                </div>
+                <h3 className="font-display font-semibold">{f.title}</h3>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  {f.description}
+                </p>
               </div>
-              <h3 className="font-semibold">{f.title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {f.description}
-              </p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>

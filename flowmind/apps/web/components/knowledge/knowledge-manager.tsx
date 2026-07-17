@@ -85,10 +85,10 @@ export function KnowledgeManager({ assistantId }: Props) {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-violet-950/5">
+    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-indigo-950/5">
       <div className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-8 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-pink-600 text-white shadow-lg">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-lg">
             <Database className="size-6" />
           </div>
           <div>
@@ -116,11 +116,11 @@ export function KnowledgeManager({ assistantId }: Props) {
           className={cn(
             'rounded-xl border-2 border-dashed bg-card p-10 text-center transition-colors',
             dragOver
-              ? 'border-violet-500 bg-violet-50/40 dark:bg-violet-950/20'
-              : 'border-border hover:border-violet-300',
+              ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/20'
+              : 'border-border hover:border-indigo-300',
           )}
         >
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-400">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
             <Upload className="size-5" />
           </div>
           <div className="text-sm font-medium">Drop files here or click to upload</div>
@@ -180,7 +180,7 @@ export function KnowledgeManager({ assistantId }: Props) {
                   key={doc.id}
                   className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-violet-100 text-violet-600 dark:bg-violet-950 dark:text-violet-400">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
                     <FileText className="size-4" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -227,7 +227,7 @@ export function KnowledgeManager({ assistantId }: Props) {
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && runSearch()}
                   placeholder="Ask a question your bot might receive..."
-                  className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <Button onClick={runSearch} variant="gradient" size="sm">
                   <Search className="size-3.5" /> Search

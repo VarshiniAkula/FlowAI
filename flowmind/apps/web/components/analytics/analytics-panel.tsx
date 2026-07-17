@@ -215,11 +215,11 @@ export function AnalyticsPanel({ assistantId }: Props) {
   const healthScore = computeHealthScore(nodes.length, errorCount, warningCount);
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-violet-950/5">
+    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-indigo-950/5">
       <div className="mx-auto max-w-5xl px-6 py-10">
         {/* Hero */}
         <div className="mb-8 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-pink-600 text-white shadow-lg">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-lg">
             <BarChart3 className="size-6" />
           </div>
           <div className="flex-1">
@@ -334,7 +334,7 @@ export function AnalyticsPanel({ assistantId }: Props) {
                       key={doc.id}
                       className="flex items-center gap-3 rounded-md border bg-card px-3 py-2"
                     >
-                      <FileText className="size-3.5 shrink-0 text-violet-500" />
+                      <FileText className="size-3.5 shrink-0 text-indigo-500" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-medium">{doc.name}</div>
                         <div className="text-[10px] text-muted-foreground">
@@ -445,7 +445,7 @@ function Section({
   return (
     <div className="rounded-xl border bg-card p-5">
       <div className="mb-4 flex items-start gap-2">
-        <div className="mt-0.5 text-violet-500">{icon}</div>
+        <div className="mt-0.5 text-indigo-500">{icon}</div>
         <div className="flex-1">
           <h2 className="text-sm font-semibold">{title}</h2>
           {subtitle && (
@@ -486,8 +486,8 @@ function LiveConversations({
   }
   if (!summary || !summary.configured) {
     return (
-      <div className="rounded-lg border border-dashed bg-gradient-to-br from-violet-50 to-pink-50 p-5 text-center dark:from-violet-950/20 dark:to-pink-950/20">
-        <CloudOff className="mx-auto mb-2 size-5 text-violet-500" />
+      <div className="rounded-lg border border-dashed bg-gradient-to-br from-indigo-50 to-indigo-50 p-5 text-center dark:from-indigo-950/20 dark:to-indigo-950/20">
+        <CloudOff className="mx-auto mb-2 size-5 text-indigo-500" />
         <div className="text-xs font-semibold">Cloud telemetry off</div>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
           Configure Supabase to start collecting hosted-chat metrics.
@@ -498,7 +498,7 @@ function LiveConversations({
   if (summary.totalConversations === 0) {
     return (
       <div className="rounded-lg border border-dashed bg-muted/20 p-5 text-center">
-        <Sparkles className="mx-auto mb-2 size-5 text-violet-500" />
+        <Sparkles className="mx-auto mb-2 size-5 text-indigo-500" />
         <div className="text-xs font-semibold">No conversations yet</div>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
           {published
@@ -552,7 +552,7 @@ function DaySpark({ byDay }: { byDay: Array<{ day: string; count: number }> }) {
         <div
           key={d.day}
           title={`${d.day}: ${d.count} conversation${d.count === 1 ? '' : 's'}`}
-          className="flex-1 rounded-sm bg-gradient-to-t from-violet-500 to-pink-500"
+          className="flex-1 rounded-sm bg-gradient-to-t from-indigo-500 to-indigo-500"
           style={{ height: `${Math.max(6, (d.count / max) * 100)}%` }}
         />
       ))}
@@ -592,7 +592,7 @@ function StatCard({
   return (
     <div className="rounded-xl border bg-card px-4 py-4">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        <span className="text-violet-500">{icon}</span>
+        <span className="text-indigo-500">{icon}</span>
         {label}
       </div>
       <div className={cn('mt-2 text-2xl font-bold', toneClasses)}>{value}</div>

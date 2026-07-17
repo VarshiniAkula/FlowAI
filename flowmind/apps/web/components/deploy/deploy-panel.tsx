@@ -159,11 +159,11 @@ export default function App() {
   const ready = nodeCount > 0;
 
   return (
-    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-violet-950/5">
+    <div className="h-full overflow-y-auto bg-gradient-to-b from-background via-background to-indigo-950/5">
       <div className="mx-auto max-w-4xl px-6 py-10">
         {/* Hero */}
         <div className="mb-8 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-pink-600 text-white shadow-lg">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-lg">
             <Rocket className="size-6" />
           </div>
           <div className="flex-1">
@@ -182,7 +182,7 @@ export default function App() {
             cloudPublishId
               ? 'border-emerald-200/60 bg-gradient-to-r from-emerald-50/60 to-teal-50/40 dark:border-emerald-900/40 dark:from-emerald-950/30 dark:to-teal-950/20'
               : isPublished
-                ? 'border-violet-200/60 bg-gradient-to-r from-violet-50/60 to-pink-50/40 dark:border-violet-900/40 dark:from-violet-950/30 dark:to-pink-950/20'
+                ? 'border-indigo-200/60 bg-gradient-to-r from-indigo-50/60 to-indigo-50/40 dark:border-indigo-900/40 dark:from-indigo-950/30 dark:to-indigo-950/20'
                 : 'border-amber-200/60 bg-gradient-to-r from-amber-50/60 to-orange-50/40 dark:border-amber-900/40 dark:from-amber-950/30 dark:to-orange-950/20',
           )}
         >
@@ -192,7 +192,7 @@ export default function App() {
               cloudPublishId
                 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                 : isPublished
-                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300'
+                  ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
                   : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
             )}
           >

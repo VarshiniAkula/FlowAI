@@ -75,7 +75,7 @@ export function BaseNode({
       className={cn(
         'min-w-[220px] rounded-xl border bg-zinc-900/95 text-white shadow-xl transition-all',
         'border-zinc-700/60 backdrop-blur',
-        selected && 'border-violet-400 ring-2 ring-violet-400/40',
+        selected && 'border-indigo-400 ring-2 ring-indigo-400/40',
         isActive && 'node-active border-blue-400',
       )}
     >

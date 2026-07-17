@@ -349,7 +349,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
   return (
     <div
       className={cn(
-        'flex h-full flex-col bg-gradient-to-b from-background via-background to-violet-950/5',
+        'flex h-full flex-col bg-gradient-to-b from-background via-background to-indigo-950/5',
         !embed && 'mx-auto max-w-2xl',
       )}
     >
@@ -361,7 +361,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
         )}
       >
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-pink-600 text-white shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-sm">
             <Bot className="size-4" />
           </div>
           <div className="min-w-0">
@@ -421,7 +421,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
             onChange={(e) => setInput(e.target.value)}
             placeholder={done ? 'Conversation ended - press reset' : 'Type a message...'}
             disabled={done || running || !startedRef.current}
-            className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <Button
             type="submit"
@@ -437,7 +437,7 @@ export function HostedChat({ assistantId, embed = false }: Props) {
             Powered by{' '}
             <a
               href="/"
-              className="font-medium text-violet-600 hover:underline dark:text-violet-400"
+              className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
             >
               FlowMind
             </a>
@@ -464,15 +464,15 @@ function Bubble({
         className={cn(
           'max-w-[82%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-relaxed shadow-sm',
           isUser
-            ? 'bg-gradient-to-br from-violet-600 to-pink-600 text-white'
+            ? 'bg-gradient-to-br from-indigo-600 to-indigo-600 text-white'
             : 'border bg-card text-foreground',
-          streaming && 'border-violet-300/60 dark:border-violet-700/60',
+          streaming && 'border-indigo-300/60 dark:border-indigo-700/60',
         )}
       >
         {content}
         {streaming && (
           <span
-            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-violet-500"
+            className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-indigo-500"
             aria-hidden="true"
           />
         )}

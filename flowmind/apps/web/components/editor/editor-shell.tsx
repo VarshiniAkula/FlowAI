@@ -114,12 +114,12 @@ export function EditorShell({
             </Link>
           </Button>
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-violet-600 to-pink-600 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Brain className="size-4" />
             </div>
           </Link>
           <div className="text-sm">
-            <span className="font-semibold">{assistant.name}</span>
+            <span className="font-display font-semibold">{assistant.name}</span>
             <Badge
               variant={assistant.status === 'active' ? 'success' : 'info'}
               className="ml-2"

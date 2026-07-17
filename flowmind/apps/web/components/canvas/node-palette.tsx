@@ -68,7 +68,7 @@ export function NodePalette() {
               key={type}
               draggable
               onDragStart={(e) => onDragStart(e, type)}
-              className="group flex cursor-grab items-start gap-2.5 rounded-lg border bg-card p-2.5 transition-all hover:border-violet-300 hover:bg-accent active:cursor-grabbing"
+              className="group flex cursor-grab items-start gap-2.5 rounded-lg border bg-card p-2.5 transition-all hover:border-indigo-300 hover:bg-accent active:cursor-grabbing"
             >
               <div
                 className={`flex size-7 shrink-0 items-center justify-center rounded ${COLORS[type]}`}

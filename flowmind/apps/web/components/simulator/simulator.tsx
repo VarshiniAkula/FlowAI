@@ -143,12 +143,12 @@ export function Simulator({ assistantId }: Props) {
   }, [graph.nodes.length]);
 
   return (
-    <div className="flex h-full overflow-hidden bg-gradient-to-b from-background via-background to-violet-950/5">
+    <div className="flex h-full overflow-hidden bg-gradient-to-b from-background via-background to-indigo-950/5">
       {/* Chat column */}
       <div className="flex flex-1 min-w-0 flex-col border-r">
         <div className="flex shrink-0 items-center justify-between border-b bg-background/60 px-5 py-3 backdrop-blur">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-pink-600 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-600 text-white">
               <Beaker className="size-4" />
             </div>
             <div>
@@ -208,7 +208,7 @@ export function Simulator({ assistantId }: Props) {
               onChange={(e) => setInput(e.target.value)}
               placeholder={done ? 'Conversation ended - press Reset' : 'Type a message...'}
               disabled={done || running || !startedRef.current}
-              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <Button
               type="submit"
@@ -226,7 +226,7 @@ export function Simulator({ assistantId }: Props) {
       <div className="flex w-[420px] shrink-0 flex-col bg-background/40">
         <div className="flex shrink-0 items-center justify-between border-b px-5 py-3">
           <div className="flex items-center gap-2">
-            <Terminal className="size-4 text-violet-500" />
+            <Terminal className="size-4 text-indigo-500" />
             <span className="text-sm font-semibold">Trace</span>
           </div>
           <Badge variant="info" className="text-[10px]">
@@ -271,7 +271,7 @@ function ChatBubble({ role, content }: { role: 'user' | 'assistant'; content: st
         className={cn(
           'max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm leading-relaxed',
           isUser
-            ? 'bg-gradient-to-br from-violet-600 to-pink-600 text-white'
+            ? 'bg-gradient-to-br from-indigo-600 to-indigo-600 text-white'
             : 'border bg-card text-foreground',
         )}
       >

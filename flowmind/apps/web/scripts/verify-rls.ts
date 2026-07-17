@@ -30,8 +30,9 @@ function loadEnvLocal() {
     for (const line of readFileSync(p, 'utf8').split('\n')) {
       const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
       if (!m) continue;
-      const [, k, vRaw] = m;
-      if (process.env[k]) continue;
+      const k = m[1];
+      const vRaw = m[2] ?? '';
+      if (!k || process.env[k]) continue;
       process.env[k] = vRaw.replace(/^['"]|['"]$/g, '');
     }
     break;
@@ -223,7 +224,6 @@ async function main() {
 
   console.log('\nCross-tenant select (user B on OrgA rows):');
   for (const t of TABLES) {
-    // @ts-expect-error dynamic string table name
     const { data, error } = await clientB.from(t).select('*').eq('org_id', orgA.orgId);
     // Profiles isn't included; memberships select filters to same-org rows.
     if (t === 'memberships') {

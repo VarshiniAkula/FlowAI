@@ -1,42 +1,91 @@
-import { NextResponse } from 'next/server';
-import { generateGraphFromStory } from '@/lib/graph-generator';
+import { generateGraphJson } from '@/lib/gemini/client';
+import { resolveGeminiCredential } from '@/lib/gemini/credentials';
+import { GeminiError } from '@/lib/gemini/errors';
+import { LIMITS } from '@/lib/gemini/limits';
+import { assertSameOrigin, errorResponse, jsonNoStore } from '@/lib/gemini/request';
+import {
+  STORY_TO_GRAPH_PROMPT,
+  generateHeuristicGraph,
+  parseGraphJson,
+} from '@/lib/graph-generator';
 
 export const runtime = 'nodejs';
 
+/**
+ * POST /api/generate-graph
+ * Resolves the Gemini credential and generates a flow graph:
+ *   - byok / platform → Gemini (JSON), validated/repaired
+ *   - fallback        → deterministic heuristic generator
+ *
+ * Provider errors (invalid key, quota, timeout) are surfaced as sanitized
+ * errors — never silently swapped for a heuristic result while the user
+ * believes Gemini is connected. Only malformed *model output* falls back to the
+ * heuristic, and the response `source` field reflects that.
+ */
 export async function POST(req: Request) {
-  let body: { story?: string };
-
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { error: 'Invalid JSON body' },
-      { status: 400 },
-    );
-  }
+    assertSameOrigin(req);
 
-  const story = body.story?.trim();
-  if (!story) {
-    return NextResponse.json(
-      { error: 'Missing required field: story' },
-      { status: 400 },
-    );
-  }
-  if (story.length > 4000) {
-    return NextResponse.json(
-      { error: 'Story is too long (max 4000 characters)' },
-      { status: 400 },
-    );
-  }
+    let body: { story?: string };
+    try {
+      body = await req.json();
+    } catch {
+      throw new GeminiError('INVALID_REQUEST', 'Expected a JSON body.');
+    }
 
-  try {
-    const result = await generateGraphFromStory(story);
-    return NextResponse.json(result);
+    const story = body.story?.trim();
+    if (!story) {
+      throw new GeminiError('INVALID_REQUEST', 'A story description is required.');
+    }
+    if (story.length > LIMITS.maxGraphDescriptionChars) {
+      throw new GeminiError(
+        'INVALID_REQUEST',
+        `Story is too long (max ${LIMITS.maxGraphDescriptionChars} characters).`,
+      );
+    }
+
+    const cred = await resolveGeminiCredential();
+
+    // No key: use the heuristic intentionally.
+    if (cred.mode === 'fallback') {
+      return jsonNoStore({
+        graph: generateHeuristicGraph(story),
+        source: 'heuristic',
+        providerMode: 'fallback',
+      });
+    }
+
+    // byok / platform: call Gemini. A provider failure throws GeminiError and
+    // is surfaced; malformed model output repairs via the heuristic path.
+    const { text, model } = await generateGraphJson({
+      apiKey: cred.apiKey,
+      prompt: STORY_TO_GRAPH_PROMPT + story,
+    });
+
+    try {
+      const graph = parseGraphJson(text);
+      return jsonNoStore({
+        graph,
+        source: 'gemini',
+        providerMode: cred.mode,
+        model,
+      });
+    } catch {
+      // Valid provider call, invalid graph JSON: repair with the heuristic and
+      // report it honestly via `source`.
+      console.warn('[api/generate-graph] model output invalid, using heuristic repair', {
+        providerMode: cred.mode,
+        model,
+      });
+      return jsonNoStore({
+        graph: generateHeuristicGraph(story),
+        source: 'heuristic',
+        providerMode: cred.mode,
+        model,
+        repaired: true,
+      });
+    }
   } catch (err) {
-    console.error('[api/generate-graph] error:', err);
-    return NextResponse.json(
-      { error: 'Failed to generate graph', details: String(err) },
-      { status: 500 },
-    );
+    return errorResponse(err);
   }
 }

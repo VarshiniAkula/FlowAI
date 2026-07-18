@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { GeminiConnectionButton } from '@/components/integrations/gemini-connection-button';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { useGraphStore } from '@/stores/graph-store';
 import { cn } from '@/lib/utils';
@@ -154,6 +155,7 @@ export function EditorShell({
         </nav>
 
         <div className="flex items-center gap-2">
+          <GeminiConnectionButton compact />
           <Button
             variant="outline"
             size="sm"

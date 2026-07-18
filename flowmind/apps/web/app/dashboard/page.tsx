@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { GeminiConnectionButton } from '@/components/integrations/gemini-connection-button';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { formatRelativeTime } from '@/lib/utils';
 import { generateHeuristicGraph } from '@/lib/graph-generator/heuristic';
@@ -104,6 +105,7 @@ export default function DashboardPage() {
             </Badge>
           </Link>
           <div className="flex items-center gap-2">
+            <GeminiConnectionButton compact />
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input

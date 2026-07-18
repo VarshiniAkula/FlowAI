@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { GeminiConnectionButton } from '@/components/integrations/gemini-connection-button';
+import { useGeminiConnection } from '@/hooks/use-gemini-connection';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { useGraphStore } from '@/stores/graph-store';
 import type { GraphEdge, GraphNode } from '@flowmind/shared';
@@ -40,6 +42,7 @@ export function StoryBuilder({ assistantId }: Props) {
   const updateAssistant = useAssistantStore((s) => s.updateAssistant);
   const saveGraph = useAssistantStore((s) => s.saveGraph);
   const setGraph = useGraphStore((s) => s.setGraph);
+  const gemini = useGeminiConnection();
 
   const [story, setStory] = useState(assistant?.storyText ?? '');
   const [generating, setGenerating] = useState(false);
@@ -63,7 +66,11 @@ export function StoryBuilder({ assistantId }: Props) {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `HTTP ${res.status}`);
+        const message =
+          typeof body.error === 'string'
+            ? body.error
+            : body.error?.message || `HTTP ${res.status}`;
+        throw new Error(message);
       }
 
       const { graph, source } = await res.json();
@@ -116,14 +123,22 @@ export function StoryBuilder({ assistantId }: Props) {
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-600 text-white shadow-lg">
             <BookOpenText className="size-6" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Story Builder</h1>
+          <div className="flex-1">
+            <h1 className="font-display text-2xl font-bold tracking-tight">Story Builder</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Describe your assistant in plain English. We&apos;ll turn it into a working flow you
               can edit on the canvas.
             </p>
           </div>
+          <GeminiConnectionButton />
         </div>
+
+        {gemini.status?.mode === 'fallback' && (
+          <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            <span className="font-semibold">Demo mode.</span> Flow generation uses a deterministic
+            simulation. Connect Gemini for real AI responses.
+          </div>
+        )}
 
         {/* Story input */}
         <Card className="overflow-hidden border-indigo-500/10">
@@ -186,7 +201,7 @@ export function StoryBuilder({ assistantId }: Props) {
             </Badge>
             <span className="text-[11px] text-muted-foreground">
               {lastSource === 'heuristic'
-                ? 'Set GEMINI_API_KEY to use Gemini for richer generation.'
+                ? 'Connect Gemini for richer, tailored generation.'
                 : 'You can refine the generated flow on the canvas.'}
             </span>
           </div>

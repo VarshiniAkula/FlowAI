@@ -1,13 +1,19 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { STORY_TO_GRAPH_PROMPT, type GeneratedGraph } from './prompt';
 import { generateHeuristicGraph } from './heuristic';
 
+/**
+ * Story-to-graph helpers.
+ *
+ * The Gemini call itself lives in `lib/gemini/client.ts` (centralized SDK).
+ * This module owns the deterministic heuristic generator, the prompt, and the
+ * validation/parse of model output — the pieces the `/api/generate-graph`
+ * route composes based on the resolved credential mode.
+ */
+
 export type GenerationSource = 'gemini' | 'heuristic';
 
-export interface GenerationResult {
-  graph: GeneratedGraph;
-  source: GenerationSource;
-}
+export { generateHeuristicGraph, STORY_TO_GRAPH_PROMPT };
+export type { GeneratedGraph };
 
 const VALID_NODE_TYPES = new Set([
   'message',
@@ -18,52 +24,18 @@ const VALID_NODE_TYPES = new Set([
   'llm_response',
 ]);
 
-/**
- * Generate a flow graph from a natural-language story.
- *
- * Tries Gemini first when GEMINI_API_KEY is set. Falls back to a deterministic
- * heuristic generator on error or when no key is configured.
- */
-export async function generateGraphFromStory(
-  story: string,
-): Promise<GenerationResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (apiKey) {
-    try {
-      const graph = await callGemini(story, apiKey);
-      const validated = validateGraph(graph);
-      return { graph: validated, source: 'gemini' };
-    } catch (err) {
-      console.warn('[graph-generator] Gemini call failed, using heuristic:', err);
-    }
-  }
-
-  return { graph: generateHeuristicGraph(story), source: 'heuristic' };
-}
-
-async function callGemini(story: string, apiKey: string): Promise<GeneratedGraph> {
-  const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.7,
-      maxOutputTokens: 4096,
-    },
-  });
-
-  const result = await model.generateContent(STORY_TO_GRAPH_PROMPT + story);
-  const text = result.response.text();
-
+/** Parse raw model JSON into a validated graph. Throws on malformed output. */
+export function parseGraphJson(text: string): GeneratedGraph {
+  let graph: GeneratedGraph;
   try {
-    return JSON.parse(text) as GeneratedGraph;
+    graph = JSON.parse(text) as GeneratedGraph;
   } catch (err) {
-    throw new Error(`Failed to parse Gemini response as JSON: ${err}`);
+    throw new Error(`Failed to parse model response as JSON: ${err}`);
   }
+  return validateGraph(graph);
 }
 
-function validateGraph(graph: GeneratedGraph): GeneratedGraph {
+export function validateGraph(graph: GeneratedGraph): GeneratedGraph {
   if (!graph.nodes || !Array.isArray(graph.nodes)) {
     throw new Error('Graph missing nodes array');
   }

@@ -6,8 +6,7 @@ your own documents (RAG), test it in a live simulator, and publish it as a hoste
 or embeddable widget.
 
 > 📦 **The active product lives in [`flowmind/`](flowmind/).** Everything you build, run, or
-> deploy is there. (This repository is named `FlowAI` for historical reasons; the product is
-> **FlowMind**.)
+> deploy is there.
 
 ---
 
@@ -22,7 +21,8 @@ into the UI**. Expect breaking changes.
 |---|---|
 | Visual builder (Story → Canvas → Test) | ✅ Working (client-side) |
 | Knowledge upload + retrieval | 🟡 Working for `.txt / .md / .csv / .html` (in-browser index) |
-| LLM answers | 🟡 Real with a Gemini key; deterministic stub without one |
+| LLM answers | 🟡 Real via **session Gemini BYOK** (or a platform key); deterministic demo stub otherwise |
+| Gemini BYOK (bring your own key) | ✅ Connect a key per browser session — validated server-side, encrypted in an HttpOnly cookie, auto-expiring |
 | Database schema + Row-Level Security | ✅ Built & verified, **not yet used by the UI** |
 | Accounts, organizations, multi-tenancy | ❌ Not built yet |
 | Cloud ingestion (PDF/DOCX, embeddings, pgvector) | ❌ Not built yet |
@@ -37,14 +37,18 @@ Full, honest breakdown: **[docs/PRODUCT-SUMMARY.md](docs/PRODUCT-SUMMARY.md)**.
 Runs entirely on your machine — no account, no cloud, data stored in your browser:
 
 - **Landing page** and dashboard.
-- **Story Builder** — describe an assistant in plain English → a working flow (heuristic
-  generator without a Gemini key; Gemini-powered with one).
+- **Story Builder** — describe an assistant in plain English → a working flow (deterministic
+  heuristic in demo mode; real Gemini generation when a key is connected).
 - **Visual Canvas** — drag nodes, wire them, edit each node in the inspector, auto-saved.
   Executable node types: message, input, choice, condition, RAG query, LLM response.
 - **Knowledge** — upload `.txt / .md / .csv / .html`; it's parsed, chunked, indexed, and
   searchable (with a built-in retrieval tester).
 - **Test simulator** — run the whole flow with a live execution trace and variable capture.
-  LLM nodes return a deterministic stub unless `GEMINI_API_KEY` is set.
+  LLM nodes return a deterministic demo response until a Gemini key is connected.
+- **Gemini BYOK** — click **Connect Gemini** (dashboard / editor) to add your own key for the
+  session. It's validated server-side, encrypted in an HttpOnly cookie, auto-expires, and is
+  never stored in the browser or database. Without a key, FlowMind stays fully usable in demo
+  mode.
 
 ## 🗺️ Roadmap
 
@@ -70,7 +74,7 @@ Details: [docs/flowmind-spec.md](docs/flowmind-spec.md) (spec),
 ## Repository layout
 
 ```
-FlowAI/                     ← repository root (product = FlowMind)
+FlowMind/                   ← repository root
 ├── docs/                   ← spec, phased plan, audit, product summary
 └── flowmind/               ← THE PRODUCT (Next.js monorepo: pnpm + Turbo)
     ├── apps/web/           ← the Next.js 15 app you run
@@ -96,8 +100,8 @@ Storage) · pnpm workspaces + Turbo.
 
 ### 1. Run the prototype (no backend needed)
 ```bash
-git clone https://github.com/VarshiniAkula/FlowAI.git
-cd FlowAI/flowmind
+git clone https://github.com/VarshiniAkula/FlowMind.git
+cd FlowMind/flowmind
 pnpm install
 pnpm --filter @flowmind/web dev
 # open http://localhost:3000
@@ -113,11 +117,16 @@ Fill in `flowmind/apps/web/.env.local`:
 
 | Variable | Needed for | Notes |
 |---|---|---|
-| `GEMINI_API_KEY` | Real generation instead of the stub | Server-only |
+| `BYOK_ENCRYPTION_KEY` | Gemini BYOK | **Server-only.** 32 bytes base64 — generate with `openssl rand -base64 32`. Required to connect a key. |
+| `GEMINI_API_KEY` | Optional platform key | Server-only. Used only when no session BYOK key is present. |
+| `GEMINI_BYOK_TTL_MINUTES` | BYOK session length | Optional, default `240` (4h). |
+| `GEMINI_GENERATION_MODEL` / `GEMINI_GRAPH_MODEL` | Model selection | Optional; default `gemini-2.0-flash`. Setting one applies to both. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Backend foundation | From your Supabase project |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Backend foundation | Publishable/anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend foundation | **Server-only; bypasses RLS; never commit** |
 | `NEXT_PUBLIC_APP_URL` | Links / redirects | e.g. `http://localhost:3000` |
+
+None of the server secrets use the `NEXT_PUBLIC_` prefix.
 
 Apply the database schema to your own Supabase project and verify tenant isolation:
 ```bash
@@ -139,6 +148,7 @@ pnpm verify:rls                         # asserts every cross-tenant access is d
 | `pnpm type-check` | TypeScript check (`tsc --noEmit`) |
 | `pnpm db:types` | Regenerate Supabase types |
 | `pnpm verify:rls` | Cross-tenant RLS test suite (needs Supabase env) |
+| `pnpm test` | Unit + route tests (Vitest) |
 
 ---
 

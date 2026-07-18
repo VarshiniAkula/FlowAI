@@ -31,7 +31,7 @@ the whole point of this document:
 | Tenancy | Single local user | Multi-tenant orgs + roles |
 | Knowledge | In-browser index, `.txt/.md/.csv/.html` | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
 | Retrieval | In-browser keyword/vector search | Server-side pgvector (HNSW, cosine) |
-| LLM | Gemini if key set, else a deterministic **stub** | Gemini `gemini-2.5-flash` + `text-embedding-004` |
+| LLM | Session **BYOK** or platform key → Gemini; else a deterministic demo **stub** | Gemini `gemini-2.5-flash` + `text-embedding-004` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
 Today's app is a **fully working client-side prototype**. The **production backend
@@ -87,12 +87,14 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 
 ### 3.4 Story Builder (NL → flow) — ✅ with caveat
 - Type a plain-English description; it generates a working graph and drops you on the canvas.
-- **Caveat:** without `GEMINI_API_KEY`, generation falls back to a **deterministic heuristic**
-  generator that matches keywords to one of a few archetypes (support / sales / knowledge /
-  booking / feedback / default). It produces a generic flow, not a bespoke one, and
-  **overwrites the assistant's name** with the archetype name. With a Gemini key it calls
-  `gemini-2.0-flash-exp` for richer, tailored generation.
-- Endpoint: `POST /api/generate-graph` (falls back to heuristic on any error/missing key).
+- **Caveat:** in **demo mode** (no connected Gemini key — see §3.11 BYOK), generation uses a
+  **deterministic heuristic** that matches keywords to one of a few archetypes (support /
+  sales / knowledge / booking / feedback / default). It produces a generic flow, not a bespoke
+  one, and **overwrites the assistant's name** with the archetype name. With a Gemini key
+  connected (session BYOK or platform), it calls Gemini for richer, tailored generation.
+- Provider errors (invalid key, quota, timeout) are surfaced as clear errors — not silently
+  swapped for a heuristic result while a key is connected.
+- Endpoint: `POST /api/generate-graph` (resolves the credential, then Gemini or heuristic).
 
 ### 3.5 Visual Canvas Builder — ✅
 - Drag nodes from the palette onto a React Flow canvas; connect them; edit each node's
@@ -135,8 +137,10 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   interpolation (`{{var}}`) all execute for real. Verified end-to-end on a flight-booking
   flow.
 - **Caveat:** `llm_response` nodes call `POST /api/llm-complete`, which returns a **canned
-  deterministic stub** when `GEMINI_API_KEY` is unset (so the UI/streaming path still works).
-  With a key it streams from Gemini. RAG nodes pull from the in-browser store.
+  deterministic demo response** when no Gemini key is connected (so the UI/streaming path still
+  works). With a key connected (session BYOK or platform) it streams from Gemini. RAG nodes
+  pull from the in-browser store. Provider/mode/model metadata rides on the response; no key
+  material appears in responses or traces.
 - **Target (Phase 5):** an authenticated `POST /api/assistants/[id]/test-chat` endpoint
   doing server-side retrieval + Gemini, using the live assistant graph/settings.
 
@@ -155,6 +159,23 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   legacy Supabase project.
 - **Target (Phase 7):** DB-backed analytics scoped by `org_id`/`assistant_id` — conversation
   and message counts, top questions, citation rate, failed-answer rate.
+
+### 3.11 Gemini connection (session BYOK) — ✅
+- FlowMind supports optional **session-based Gemini BYOK**. A user can connect a Gemini
+  credential (dashboard / editor / Story / Simulator "Connect Gemini" control) to enable real
+  graph generation and LLM-node responses. The credential is validated server-side (against a
+  low-cost `models.list` request), **encrypted with AES-256-GCM in an HttpOnly session
+  cookie**, **expires automatically** (default 4h), and is **never stored in browser
+  persistence or the database** and never returned to the browser.
+- **Three execution modes**, in precedence order: session **BYOK** → server **platform** key
+  (`GEMINI_API_KEY`) → deterministic **fallback** (demo). The UI shows the current mode
+  ("Gemini connected · ••••ABCD" / "Gemini available" / "Demo mode").
+- Routes: `POST/GET/DELETE /api/integrations/gemini/{connect,status,disconnect}` (Node
+  runtime, origin-checked, `Cache-Control: no-store`). SDK is `@google/genai`, centralized in
+  `lib/gemini/client.ts`.
+- **Out of scope (by design):** organization-scoped/permanent credentials, database-backed
+  secret storage, published-widget owner credentials, and multi-provider support. It is a
+  session BYOK feature — not an enterprise secret-management system.
 
 ---
 
@@ -246,10 +267,16 @@ Required vars (`flowmind/apps/web/.env.example`):
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (formerly `ANON_KEY`; new Supabase naming)
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only; bypasses RLS)
-- `GEMINI_API_KEY` (server-only; **currently unset in local dev → LLM is stubbed**)
+- `BYOK_ENCRYPTION_KEY` (server-only; 32-byte base64, `openssl rand -base64 32`) — required to
+  connect a user Gemini key
+- `GEMINI_API_KEY` (server-only; optional **platform** key used only when no session BYOK key
+  is present)
+- `GEMINI_BYOK_TTL_MINUTES` (optional, default 240), `GEMINI_GENERATION_MODEL` /
+  `GEMINI_GRAPH_MODEL` (optional; default `gemini-2.0-flash`)
 - `NEXT_PUBLIC_APP_URL`
 
-Scripts: `pnpm dev`, `pnpm build`, `pnpm type-check`, `pnpm db:types`, `pnpm verify:rls`.
+None of the server secrets use the `NEXT_PUBLIC_` prefix. Scripts: `pnpm dev`, `pnpm build`,
+`pnpm type-check`, `pnpm test`, `pnpm db:types`, `pnpm verify:rls`.
 
 ---
 
@@ -258,12 +285,14 @@ Scripts: `pnpm dev`, `pnpm build`, `pnpm type-check`, `pnpm db:types`, `pnpm ver
 Run `pnpm --filter @flowmind/web dev`, open `localhost:3000`:
 1. Browse the redesigned landing page.
 2. Create assistants on the dashboard (from scratch or a template).
-3. Generate a flow from a plain-English story (heuristic without a Gemini key).
+3. Generate a flow from a plain-English story (heuristic in demo mode; real Gemini when connected).
 4. Edit the flow on the canvas — drag nodes, wire them, edit fields in the inspector.
 5. Upload `.txt/.md/.csv/.html` knowledge; it's parsed, indexed, and searchable (Test Retrieval).
 6. Test the assistant in the simulator with full execution trace + variable capture
-   (LLM nodes stubbed without a Gemini key).
-7. Publish to the legacy hosted-chat path and open `/chat/[id]`.
+   (LLM nodes return a demo response until a Gemini key is connected).
+7. **Connect Gemini (BYOK)** for the session to get real generation + LLM output; disconnect
+   to return to demo mode.
+8. Publish to the legacy hosted-chat path and open `/chat/[id]`.
 
 All of this is **single-user and local** — data is in your browser.
 
@@ -273,7 +302,9 @@ All of this is **single-user and local** — data is in your browser.
 - ❌ Organizations, roles, members, invitations, org switching.
 - ❌ Assistants/knowledge saved to Supabase (still localStorage).
 - ❌ PDF/DOCX ingestion; cloud file storage; real embeddings; server-side pgvector retrieval.
-- ❌ Real LLM answers unless you supply `GEMINI_API_KEY`.
+- ❌ Real LLM answers unless a Gemini key is connected (session BYOK) or a platform key is set.
+- ❌ Organization-scoped / persisted Gemini credentials; BYOK for published widgets (BYOK is
+  session-only, by design).
 - ❌ Authenticated server-side test-chat endpoint.
 - ❌ Publish against the new schema; public `/api/chat/[publicId]`; the `/widget.js` embed;
   disable/republish; citations at runtime.
@@ -283,8 +314,11 @@ All of this is **single-user and local** — data is in your browser.
 
 ## 11. Known stubs, caveats & gotchas
 
-- **LLM stub:** no `GEMINI_API_KEY` → `/api/llm-complete` returns canned text; story-gen uses
-  the heuristic. Both are intentional graceful-degradation paths.
+- **Demo mode:** with no connected Gemini key, `/api/llm-complete` returns a canned response
+  and story-gen uses the heuristic. Both are intentional graceful-degradation paths.
+- **BYOK scope:** the connected key is session-only — encrypted in an HttpOnly cookie, never
+  in `localStorage`/Zustand/the database, auto-expiring. It is **not** a managed secret vault,
+  not organization-scoped, and not used by published widgets.
 - **Story rename:** heuristic generation overwrites the assistant name with its archetype
   (e.g. "Flight Booking Assistant" → "Booking Assistant").
 - **Two backends:** the running app talks to the **legacy** Supabase project; the Phase 1
@@ -317,8 +351,11 @@ begins.
 FlowMind is a visual AI-assistant builder: describe a bot in plain English or drag nodes on
 a canvas, ground it in your documents, test it live, and publish it as a hosted chat or web
 widget. **Today it runs as a polished single-user, browser-local prototype** — you can build
-flows, upload text knowledge, retrieve against it, and simulate conversations end-to-end
-(with LLM answers stubbed until a Gemini key is added). **The production backbone — a
+flows, upload text knowledge, retrieve against it, and simulate conversations end-to-end.
+It supports **optional session-based Gemini BYOK**: connect your own key to enable real graph
+generation and LLM responses (validated server-side, encrypted in an auto-expiring HttpOnly
+cookie, never persisted to the browser or database); without one, it stays fully usable in a
+deterministic demo mode. **The production backbone — a
 multi-tenant Postgres schema with row-level security, storage, and server helpers — was just
 built and verified in Phase 1, but is not yet connected to the UI.** The remaining work
 (Phases 2–7) swaps localStorage for Supabase, adds accounts and organizations, moves

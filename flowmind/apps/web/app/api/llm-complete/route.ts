@@ -1,5 +1,11 @@
-import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { streamText, generateText } from '@/lib/gemini/client';
+import {
+  resolveGeminiCredential,
+  type GeminiCredentialSource,
+} from '@/lib/gemini/credentials';
+import { GeminiError, mapUpstreamError } from '@/lib/gemini/errors';
+import { LIMITS } from '@/lib/gemini/limits';
+import { assertSameOrigin, errorResponse, jsonNoStore } from '@/lib/gemini/request';
 
 export const runtime = 'nodejs';
 
@@ -11,86 +17,83 @@ interface Body {
 }
 
 /**
- * LLM completion endpoint. Two response modes:
+ * POST /api/llm-complete — LLM completion for the test simulator.
  *
- * - JSON (default): single round-trip, returns `{ text, source }`. Used by
- *   server-side / non-interactive callers.
- * - SSE (when `?stream=1` or `body.stream === true`): a `text/event-stream`
- *   that emits `event: chunk` frames carrying `{delta}` plus a terminal
- *   `event: done` frame with the full text. The hosted chat consumes this so
- *   visitors see tokens land as they're generated rather than after the whole
- *   answer arrives.
+ * Credential precedence via resolveGeminiCredential():
+ *   - byok / platform → real Gemini (JSON or SSE streaming)
+ *   - fallback        → deterministic canned reply (preserves the offline demo)
  *
- * Both modes degrade gracefully when `GEMINI_API_KEY` is missing - the stub
- * branch synthesizes a deterministic reply (and, in stream mode, fakes a
- * paced character-by-character drip so the UI streaming path is still
- * exercised end-to-end).
+ * Streaming frame shape is unchanged (`event: chunk|done|error`), so the
+ * runtime's SSE consumer keeps working. Provider metadata (mode/model/tokens)
+ * rides on the `done` frame / JSON body — never any key material.
  */
 export async function POST(req: Request) {
-  let body: Body;
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-  }
+    assertSameOrigin(req);
 
-  const url = new URL(req.url);
-  const wantsStream = body.stream === true || url.searchParams.get('stream') === '1';
+    let body: Body;
+    try {
+      body = await req.json();
+    } catch {
+      throw new GeminiError('INVALID_REQUEST', 'Invalid JSON body.');
+    }
 
-  const systemPrompt = (body.systemPrompt ?? '').trim();
-  const userPrompt = (body.userPrompt ?? '').trim();
-  if (!userPrompt && !systemPrompt) {
-    return NextResponse.json(
-      { error: 'systemPrompt or userPrompt is required' },
-      { status: 400 },
-    );
-  }
+    const url = new URL(req.url);
+    const wantsStream = body.stream === true || url.searchParams.get('stream') === '1';
+    const systemPrompt = (body.systemPrompt ?? '').trim();
+    const userPrompt = (body.userPrompt ?? '').trim();
 
-  const apiKey = process.env.GEMINI_API_KEY;
+    if (!userPrompt && !systemPrompt) {
+      throw new GeminiError('INVALID_REQUEST', 'systemPrompt or userPrompt is required.');
+    }
+    if (systemPrompt.length + userPrompt.length > LIMITS.maxLlmPromptChars) {
+      throw new GeminiError(
+        'INVALID_REQUEST',
+        `Prompt is too long (max ${LIMITS.maxLlmPromptChars} characters).`,
+      );
+    }
 
-  if (wantsStream) {
-    return streamResponse({ systemPrompt, userPrompt, temperature: body.temperature, apiKey });
-  }
+    const cred = await resolveGeminiCredential();
 
-  if (!apiKey) {
-    // Soft-fail with a deterministic stub so the simulator stays usable
-    // even when the user hasn't wired up an API key yet.
-    return NextResponse.json({
-      text: stubReply(systemPrompt, userPrompt),
-      source: 'stub',
+    if (wantsStream) {
+      return streamResponse({ cred, systemPrompt, userPrompt, temperature: body.temperature });
+    }
+
+    if (cred.mode === 'fallback') {
+      return jsonNoStore({
+        text: stubReply(systemPrompt, userPrompt),
+        source: 'stub',
+        providerMode: 'fallback',
+      });
+    }
+
+    const result = await generateText({
+      apiKey: cred.apiKey,
+      systemPrompt: systemPrompt || undefined,
+      userPrompt,
+      temperature: body.temperature,
     });
-  }
-
-  try {
-    const client = new GoogleGenerativeAI(apiKey);
-    const model = client.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
-      systemInstruction: systemPrompt || undefined,
-      generationConfig: {
-        temperature: body.temperature ?? 0.7,
-        maxOutputTokens: 1024,
-      },
+    return jsonNoStore({
+      text: result.text,
+      source: 'gemini',
+      providerMode: cred.mode,
+      model: result.model,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
     });
-    const result = await model.generateContent(userPrompt || ' ');
-    const text = result.response.text();
-    return NextResponse.json({ text, source: 'gemini' });
   } catch (err) {
-    console.error('[api/llm-complete] error:', err);
-    return NextResponse.json(
-      { error: 'LLM call failed', details: String(err) },
-      { status: 500 },
-    );
+    return errorResponse(err);
   }
 }
 
 interface StreamArgs {
+  cred: GeminiCredentialSource;
   systemPrompt: string;
   userPrompt: string;
   temperature?: number;
-  apiKey: string | undefined;
 }
 
-function streamResponse({ systemPrompt, userPrompt, temperature, apiKey }: StreamArgs): Response {
+function streamResponse({ cred, systemPrompt, userPrompt, temperature }: StreamArgs): Response {
   const encoder = new TextEncoder();
   const sse = (event: string, data: unknown) =>
     encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -98,42 +101,49 @@ function streamResponse({ systemPrompt, userPrompt, temperature, apiKey }: Strea
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        if (!apiKey) {
-          // Stub mode: drip the canned reply so the UI streaming path is
-          // exercised even without a real API key.
+        if (cred.mode === 'fallback') {
           const full = stubReply(systemPrompt, userPrompt);
           for (const piece of chunkStub(full)) {
             controller.enqueue(sse('chunk', { delta: piece }));
             await sleep(20);
           }
-          controller.enqueue(sse('done', { text: full, source: 'stub' }));
+          controller.enqueue(sse('done', { text: full, source: 'stub', providerMode: 'fallback' }));
           controller.close();
           return;
         }
 
-        const client = new GoogleGenerativeAI(apiKey);
-        const model = client.getGenerativeModel({
-          model: 'gemini-2.0-flash-exp',
-          systemInstruction: systemPrompt || undefined,
-          generationConfig: {
-            temperature: temperature ?? 0.7,
-            maxOutputTokens: 1024,
-          },
+        const { model, deltas } = await streamText({
+          apiKey: cred.apiKey,
+          systemPrompt: systemPrompt || undefined,
+          userPrompt,
+          temperature,
         });
 
-        const result = await model.generateContentStream(userPrompt || ' ');
         let full = '';
-        for await (const chunk of result.stream) {
-          const delta = chunk.text();
-          if (!delta) continue;
-          full += delta;
-          controller.enqueue(sse('chunk', { delta }));
+        while (true) {
+          const next = await deltas.next();
+          if (next.done) {
+            const usage = next.value;
+            controller.enqueue(
+              sse('done', {
+                text: full,
+                source: 'gemini',
+                providerMode: cred.mode,
+                model,
+                inputTokens: usage?.inputTokens,
+                outputTokens: usage?.outputTokens,
+              }),
+            );
+            controller.close();
+            return;
+          }
+          full += next.value;
+          controller.enqueue(sse('chunk', { delta: next.value }));
         }
-        controller.enqueue(sse('done', { text: full, source: 'gemini' }));
-        controller.close();
       } catch (err) {
-        console.error('[api/llm-complete stream] error:', err);
-        controller.enqueue(sse('error', { error: 'LLM call failed', details: String(err) }));
+        // Sanitized error only — no raw provider object, headers, or key.
+        const g = mapUpstreamError(err);
+        controller.enqueue(sse('error', { error: g.message, code: g.code }));
         controller.close();
       }
     },
@@ -143,16 +153,14 @@ function streamResponse({ systemPrompt, userPrompt, temperature, apiKey }: Strea
     status: 200,
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
+      'Cache-Control': 'no-store, no-transform',
       Connection: 'keep-alive',
-      // Disable proxy buffering on platforms that honour it (e.g. nginx).
       'X-Accel-Buffering': 'no',
     },
   });
 }
 
 function chunkStub(text: string): string[] {
-  // Word-ish chunks so the stub feels like a real stream rather than per-char.
   const out: string[] = [];
   const words = text.split(/(\s+)/);
   let buf = '';
@@ -174,7 +182,7 @@ function sleep(ms: number): Promise<void> {
 function stubReply(systemPrompt: string, userPrompt: string): string {
   const sys = systemPrompt ? `(system: ${systemPrompt.slice(0, 80)}...) ` : '';
   return (
-    `${sys}This is a stub response - set GEMINI_API_KEY to enable real Gemini ` +
-    `completions. You asked: "${userPrompt.slice(0, 200)}"`
+    `${sys}Demo mode - this is a simulated response. Connect a Gemini key to enable ` +
+    `real AI answers. You asked: "${userPrompt.slice(0, 200)}"`
   );
 }

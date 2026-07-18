@@ -84,9 +84,6 @@ export function Hero() {
               </Button>
             </div>
 
-            <p className="mt-8 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Trusted by builders shipping real assistants
-            </p>
           </div>
 
           {/* Right: product-preview card */}

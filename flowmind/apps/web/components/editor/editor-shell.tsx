@@ -48,12 +48,24 @@ export function EditorShell({
   const assistant = useAssistantStore((s) => s.getAssistant(assistantId));
   const saveGraph = useAssistantStore((s) => s.saveGraph);
   const updateAssistant = useAssistantStore((s) => s.updateAssistant);
+  const load = useAssistantStore((s) => s.load);
+  const loaded = useAssistantStore((s) => s.loaded);
   const { nodes, edges, setGraph } = useGraphStore();
   const [saved, setSaved] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  // Load the current user's assistants from Supabase (once per session).
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // If loaded and this assistant isn't ours (or was deleted), leave the editor.
+  useEffect(() => {
+    if (mounted && loaded && !assistant) router.replace('/dashboard');
+  }, [mounted, loaded, assistant, router]);
 
   // Hydrate graph store from assistant on first load
   useEffect(() => {

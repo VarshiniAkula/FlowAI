@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Brain, Plus, Search, ArrowUpRight, Sparkles, Workflow, Trash2, AlertTriangle } from 'lucide-react';
+import { Brain, Plus, Search, ArrowUpRight, Sparkles, Workflow, Trash2, AlertTriangle, Loader2, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -63,31 +63,45 @@ function generatedGraphToGraph(generated: ReturnType<typeof generateHeuristicGra
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { assistants, createAssistant, saveGraph, deleteAssistant } = useAssistantStore();
+  const { assistants, createAssistant, saveGraph, deleteAssistant, load, loaded } =
+    useAssistantStore();
   const [query, setQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Assistant | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [creating, setCreating] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const filtered = (mounted ? assistants : []).filter((a) =>
+  const filtered = assistants.filter((a) =>
     a.name.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleCreate = () => {
-    if (!newName.trim()) return;
-    const a = createAssistant(newName.trim(), newDesc.trim() || undefined);
-    router.push(`/editor/${a.id}/canvas`);
+  const handleCreate = async () => {
+    if (!newName.trim() || creating) return;
+    setCreating(true);
+    try {
+      const a = await createAssistant(newName.trim(), newDesc.trim() || undefined);
+      router.push(`/editor/${a.id}/canvas`);
+    } catch {
+      setCreating(false);
+    }
   };
 
-  const handleCreateFromTemplate = (template: (typeof TEMPLATES)[number]) => {
-    const a = createAssistant(template.name, template.description);
-    const generated = generateHeuristicGraph(template.seedStory);
-    saveGraph(a.id, generatedGraphToGraph(generated));
-    router.push(`/editor/${a.id}/canvas`);
+  const handleCreateFromTemplate = async (template: (typeof TEMPLATES)[number]) => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const a = await createAssistant(template.name, template.description);
+      const generated = generateHeuristicGraph(template.seedStory);
+      saveGraph(a.id, generatedGraphToGraph(generated));
+      router.push(`/editor/${a.id}/canvas`);
+    } catch {
+      setCreating(false);
+    }
   };
 
   const handleConfirmDelete = () => {
@@ -128,6 +142,11 @@ export default function DashboardPage() {
               className="gap-1.5"
             >
               <Plus className="size-4" /> New Assistant
+            </Button>
+            <Button asChild variant="ghost" size="icon" title="Sign out">
+              <a href="/logout">
+                <LogOut className="size-4" />
+              </a>
             </Button>
           </div>
         </div>
@@ -174,8 +193,8 @@ export default function DashboardPage() {
                 Your assistants
               </h2>
               <p className="text-sm text-muted-foreground">
-                {!mounted
-                  ? '\u00a0'
+                {!loaded
+                  ? 'Loading\u2026'
                   : assistants.length === 0
                     ? 'You have no assistants yet'
                     : `${assistants.length} total`}
@@ -183,7 +202,11 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {filtered.length === 0 ? (
+          {!loaded ? (
+            <Card className="flex items-center justify-center gap-3 border-dashed py-16 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Loading your assistants\u2026
+            </Card>
+          ) : filtered.length === 0 ? (
             <Card className="flex flex-col items-center justify-center gap-4 border-dashed py-16">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-primary">
                 <Sparkles className="size-7" />
@@ -299,8 +322,9 @@ export default function DashboardPage() {
               <Button
                 variant="gradient"
                 onClick={handleCreate}
-                disabled={!newName.trim()}
+                disabled={!newName.trim() || creating}
               >
+                {creating ? <Loader2 className="size-4 animate-spin" /> : null}
                 Create
               </Button>
             </div>

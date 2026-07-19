@@ -5,8 +5,8 @@ import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from './database.types';
 
 /**
- * Browser Supabase client for auth flows (login/signup/logout) only.
- * Always uses the anon key. Never import the service role client here.
+ * Browser Supabase client for auth + per-user data (RLS-scoped). Always uses
+ * the anon/publishable key. Never import the service role client here.
  */
 export function createSupabaseBrowserClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -18,3 +18,6 @@ export function createSupabaseBrowserClient() {
   }
   return createBrowserClient<Database>(url, anonKey);
 }
+
+/** The concrete client type, shared so data helpers agree on generics. */
+export type BrowserSupabaseClient = ReturnType<typeof createSupabaseBrowserClient>;

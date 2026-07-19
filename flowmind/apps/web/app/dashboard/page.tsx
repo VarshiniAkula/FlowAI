@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Brain, Plus, Search, ArrowUpRight, Sparkles, Workflow } from 'lucide-react';
+import { Brain, Plus, Search, ArrowUpRight, Sparkles, Workflow, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,7 @@ import { GeminiConnectionButton } from '@/components/integrations/gemini-connect
 import { useAssistantStore } from '@/stores/assistant-store';
 import { formatRelativeTime } from '@/lib/utils';
 import { generateHeuristicGraph } from '@/lib/graph-generator/heuristic';
-import type { Graph, GraphNode, GraphEdge, NodeType } from '@flowmind/shared';
+import type { Assistant, Graph, GraphNode, GraphEdge, NodeType } from '@flowmind/shared';
 
 const TEMPLATES = [
   {
@@ -63,11 +63,12 @@ function generatedGraphToGraph(generated: ReturnType<typeof generateHeuristicGra
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { assistants, createAssistant, saveGraph } = useAssistantStore();
+  const { assistants, createAssistant, saveGraph, deleteAssistant } = useAssistantStore();
   const [query, setQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<Assistant | null>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
@@ -87,6 +88,12 @@ export default function DashboardPage() {
     const generated = generateHeuristicGraph(template.seedStory);
     saveGraph(a.id, generatedGraphToGraph(generated));
     router.push(`/editor/${a.id}/canvas`);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!confirmDelete) return;
+    deleteAssistant(confirmDelete.id);
+    setConfirmDelete(null);
   };
 
   return (
@@ -194,40 +201,50 @@ export default function DashboardPage() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((a) => (
-                <Link
-                  key={a.id}
-                  href={`/editor/${a.id}/canvas`}
-                  className="group block"
-                >
-                  <Card className="h-full p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
-                    <div className="mb-3 flex items-start justify-between">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-primary">
+                <div key={a.id} className="group relative">
+                  <Link href={`/editor/${a.id}/canvas`} className="block h-full">
+                    <Card className="h-full p-5 transition-all hover:-translate-y-0.5 hover:shadow-md">
+                      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-primary">
                         <Workflow className="size-5" />
                       </div>
-                      <Badge
-                        variant={
-                          a.status === 'active'
-                            ? 'success'
-                            : a.status === 'archived'
-                              ? 'secondary'
-                              : 'info'
-                        }
-                      >
-                        {a.status}
-                      </Badge>
-                    </div>
-                    <h3 className="font-semibold">{a.name}</h3>
-                    {a.description && (
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                        {a.description}
-                      </p>
-                    )}
-                    <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{a.graph.nodes.length} nodes</span>
-                      <span>Updated {formatRelativeTime(a.updatedAt)}</span>
-                    </div>
-                  </Card>
-                </Link>
+                      <h3 className="font-semibold">{a.name}</h3>
+                      {a.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                          {a.description}
+                        </p>
+                      )}
+                      <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <Badge
+                          variant={
+                            a.status === 'active'
+                              ? 'success'
+                              : a.status === 'archived'
+                                ? 'secondary'
+                                : 'info'
+                          }
+                        >
+                          {a.status}
+                        </Badge>
+                        <span className="truncate">
+                          {a.graph.nodes.length} nodes · Updated {formatRelativeTime(a.updatedAt)}
+                        </span>
+                      </div>
+                    </Card>
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${a.name}`}
+                    title="Delete assistant"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setConfirmDelete(a);
+                    }}
+                    className="absolute right-2.5 top-2.5 z-10 rounded-md border border-border bg-card/90 p-1.5 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition hover:border-destructive/40 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -285,6 +302,41 @@ export default function DashboardPage() {
                 disabled={!newName.trim()}
               >
                 Create
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setConfirmDelete(null)}
+        >
+          <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                <AlertTriangle className="size-4" />
+              </span>
+              <div>
+                <h3 className="font-display text-lg font-bold tracking-tight">
+                  Delete assistant?
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This permanently deletes{' '}
+                  <span className="font-medium text-foreground">{confirmDelete.name}</span>
+                  {confirmDelete.status === 'draft' ? ' (draft)' : ''} and its flow. This can&apos;t
+                  be undone.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmDelete}>
+                <Trash2 className="size-4" /> Delete
               </Button>
             </div>
           </Card>

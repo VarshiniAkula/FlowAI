@@ -26,17 +26,17 @@ the whole point of this document:
 
 | | **What ships today** | **What the spec targets** |
 |---|---|---|
-| Data home | Browser `localStorage` | Supabase Postgres with RLS |
-| Auth | None (open app) | Supabase Auth + org membership |
-| Tenancy | Single local user | Multi-tenant orgs + roles |
+| Data home | **Supabase Postgres with RLS** (assistants) | Supabase Postgres with RLS |
+| Auth | **Email/password login (`@supabase/ssr`)** | Supabase Auth + org membership |
+| Tenancy | **Per-user isolation** (one personal org each) | Multi-tenant orgs + roles |
 | Knowledge | In-browser index, `.txt/.md/.csv/.html` | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
 | Retrieval | In-browser keyword/vector search | Server-side pgvector (HNSW, cosine) |
 | LLM | Session **BYOK** or platform key → Gemini; else a deterministic demo **stub** | Gemini `gemini-2.5-flash` + `text-embedding-004` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
-Today's app is a **fully working client-side prototype**. The **production backend
-foundation (database + security) was just built in Phase 1** but is **not yet wired into
-the UI**. Phases 2–7 connect them.
+Today's app has **real accounts and per-user assistant history** backed by Supabase + RLS
+(auth + assistant persistence, Phases 2–3). Multi-member organizations, cloud ingestion,
+server-side retrieval, and the new publish/widget path (Phases 4–7) are not built yet.
 
 ---
 
@@ -70,20 +70,25 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   header, footer. Brand is **FlowMind** throughout.
 - Copy matches reality (the old "crawl websites" claim was removed).
 
-### 3.2 Authentication & multi-tenancy — ❌ (UI) / ✅ (DB foundation)
-- **No login, signup, logout, or session** in the app. Every page is open.
-- **No organizations, memberships, roles, invitations, or org switcher** in the UI.
-- **BUT** the entire database + security layer for this exists (Phase 1, §4): 11 tables,
-  RLS on all of them, role helpers, an org-bootstrap function, and an invitations table.
-  It's provisioned and verified — just not consumed by any page yet.
-- Planned for **Phase 2**.
+### 3.2 Authentication & per-user isolation — ✅ (accounts) / ❌ (multi-member orgs)
+- **Live:** email/password **sign up / sign in / sign out** via `@supabase/ssr`. `middleware.ts`
+  protects `/dashboard` and `/editor` and redirects unauthenticated users to `/login`.
+- On first login, a **personal organization** ("My Workspace") is created automatically via
+  the `bootstrap_organization()` SECURITY DEFINER function. Every user has exactly one org;
+  RLS scopes all data by org membership, so **one user never sees another's assistants**.
+- **Not built:** the multi-member org experience — invitations, roles, member management, and
+  an org switcher. Each account is a single personal workspace for now.
+- Files: `middleware.ts`, `app/{login,signup}/`, `app/logout/route.ts`,
+  `components/auth/auth-form.tsx`, `lib/db/orgs.ts`.
 
-### 3.3 Dashboard & assistant management — 🟡
-- **Works:** list assistants, create a new one (name + description), create from a
-  template (Customer Support / Sales Qualifier / Knowledge Assistant), search, open in editor.
-- **Prototype-grade:** all assistants live in `localStorage` (`flowmind-assistants` key)
-  via a Zustand `persist` store. **Not** in Supabase, **not** multi-tenant, gone if you
-  clear browser storage. Replacing this with Supabase-backed CRUD is **Phase 3**.
+### 3.3 Dashboard & assistant management — ✅ (per-user, Supabase-backed)
+- **Works:** list / create / open / **delete** (with confirmation) assistants, create from a
+  template (Customer Support / Sales Qualifier / Knowledge Assistant), search.
+- **Persistence:** assistants live in the Supabase `assistants` table, scoped to the user's
+  org by RLS — **not** localStorage. The Zustand store is Supabase-backed with optimistic
+  updates + background persistence; the editor loads/saves the graph from Supabase.
+  Verified end-to-end (user A creates → user B sees nothing → A re-login sees theirs).
+- Files: `stores/assistant-store.ts`, `lib/db/assistants.ts`.
 
 ### 3.4 Story Builder (NL → flow) — ✅ with caveat
 - Type a plain-English description; it generates a working graph and drops you on the canvas.
@@ -222,13 +227,18 @@ This is the production-grade database + security layer. It **exists and is provi
 
 ---
 
-## 5. The two Supabase projects (important)
+## 5. One consolidated backend
 
-1. **Legacy project** — powers the live demo and the current `/api/publish`,
-   `/api/conversations`, `/api/analytics`, `/api/published` routes (via the anon key, legacy
-   `flowmind_*` tables). Untouched by new work.
-2. **New `flowmind-dev` (`dlxzeiwfebrukaefwriz`)** — holds the Phase 1 schema above. This is
-   the future backend. Nothing in the running UI points at it yet.
+Everything now runs against the **single `flowmind-backend` (`dlxzeiwfebrukaefwriz`)** Supabase
+project on **one Vercel project**:
+- Auth + per-user assistants use the RLS-secured Phase-1 schema (`assistants`, `memberships`,
+  `organizations`, …).
+- The legacy publish/hosted-chat/analytics routes use `flowmind_published_assistants` and
+  `flowmind_conversations`, which were recreated in this same project (migration
+  `0008_legacy_publish_tables.sql`) — public demo tables, anon read/insert, no private data.
+
+The older separate demo project is no longer referenced. (Any assistants published on the
+previous live demo lived in that old project, so those `/chat/…` links reset after the switch.)
 
 ---
 
@@ -250,7 +260,7 @@ This is the production-grade database + security layer. It **exists and is provi
 - **Framework:** Next.js 15.5 (App Router, RSC), React 19, TypeScript strict.
 - **Styling:** Tailwind CSS v4, Radix UI primitives, lucide-react icons, sonner toasts.
 - **Canvas:** React Flow (`@xyflow/react`) v12.
-- **State:** Zustand (with `persist` to localStorage — the current source of truth).
+- **State:** Zustand (assistants are Supabase-backed and RLS-isolated; knowledge remains an in-browser store for now).
 - **Validation:** Zod (shared validators in `packages/shared`).
 - **AI:** Google Gemini (`@google/generative-ai`) — `gemini-2.0-flash-exp` today; spec
   targets `gemini-2.5-flash` + `text-embedding-004`.
@@ -280,11 +290,12 @@ None of the server secrets use the `NEXT_PUBLIC_` prefix. Scripts: `pnpm dev`, `
 
 ---
 
-## 9. What works **right now** (runnable today, no login)
+## 9. What works **right now**
 
-Run `pnpm --filter @flowmind/web dev`, open `localhost:3000`:
-1. Browse the redesigned landing page.
-2. Create assistants on the dashboard (from scratch or a template).
+Run `pnpm --filter @flowmind/web dev`, open `localhost:3000` (needs Supabase env — see §8):
+1. **Sign up / sign in** — `/dashboard` and `/editor` are protected; first login creates your
+   personal workspace.
+2. Create assistants on the dashboard (from scratch or a template); **delete** with confirmation.
 3. Generate a flow from a plain-English story (heuristic in demo mode; real Gemini when connected).
 4. Edit the flow on the canvas — drag nodes, wire them, edit fields in the inspector.
 5. Upload `.txt/.md/.csv/.html` knowledge; it's parsed, indexed, and searchable (Test Retrieval).
@@ -292,15 +303,16 @@ Run `pnpm --filter @flowmind/web dev`, open `localhost:3000`:
    (LLM nodes return a demo response until a Gemini key is connected).
 7. **Connect Gemini (BYOK)** for the session to get real generation + LLM output; disconnect
    to return to demo mode.
-8. Publish to the legacy hosted-chat path and open `/chat/[id]`.
+8. Publish to the hosted-chat path and open `/chat/[id]`.
 
-All of this is **single-user and local** — data is in your browser.
+Your assistants are **cloud-stored and private to your account** (RLS-isolated). Knowledge is
+still an in-browser store for now.
 
 ## 10. What does **not** work yet
 
-- ❌ Sign up / log in / sessions; any notion of a user account.
-- ❌ Organizations, roles, members, invitations, org switching.
-- ❌ Assistants/knowledge saved to Supabase (still localStorage).
+- ❌ Multi-member organizations, roles, members, invitations, org switching (each user gets
+  one personal workspace).
+- ❌ Knowledge saved to Supabase (still an in-browser store) — assistants ARE cloud-stored.
 - ❌ PDF/DOCX ingestion; cloud file storage; real embeddings; server-side pgvector retrieval.
 - ❌ Real LLM answers unless a Gemini key is connected (session BYOK) or a platform key is set.
 - ❌ Organization-scoped / persisted Gemini credentials; BYOK for published widgets (BYOK is
@@ -321,8 +333,11 @@ All of this is **single-user and local** — data is in your browser.
   not organization-scoped, and not used by published widgets.
 - **Story rename:** heuristic generation overwrites the assistant name with its archetype
   (e.g. "Flight Booking Assistant" → "Booking Assistant").
-- **Two backends:** the running app talks to the **legacy** Supabase project; the Phase 1
-  schema lives in a **separate new** project not yet wired in.
+- **One backend:** auth, per-user assistants, AND the legacy publish/hosted-chat routes now
+  all run against the **single new `flowmind-backend`** Supabase project (the legacy
+  `flowmind_*` demo tables were recreated there). Deployed on one Vercel project.
+- **Signup confirmation:** email auto-confirm is enabled on the project so signup logs in
+  immediately (prototype-friendly).
 - **parse-document scope:** text formats only; PDF/DOCX are explicitly rejected here and are
   slated for the Edge Function pipeline.
 - **Node palette vs constants:** 6 executable node types; the rest are forward-looking stubs.
@@ -350,15 +365,14 @@ begins.
 
 FlowMind is a visual AI-assistant builder: describe a bot in plain English or drag nodes on
 a canvas, ground it in your documents, test it live, and publish it as a hosted chat or web
-widget. **Today it runs as a polished single-user, browser-local prototype** — you can build
-flows, upload text knowledge, retrieve against it, and simulate conversations end-to-end.
+widget. **You sign in with a real account, and your assistants are stored in Supabase and
+isolated per user by Row-Level Security** — one account never sees another's history. You can
+build flows, upload text knowledge, retrieve against it, and simulate conversations end-to-end.
 It supports **optional session-based Gemini BYOK**: connect your own key to enable real graph
 generation and LLM responses (validated server-side, encrypted in an auto-expiring HttpOnly
 cookie, never persisted to the browser or database); without one, it stays fully usable in a
-deterministic demo mode. **The production backbone — a
-multi-tenant Postgres schema with row-level security, storage, and server helpers — was just
-built and verified in Phase 1, but is not yet connected to the UI.** The remaining work
-(Phases 2–7) swaps localStorage for Supabase, adds accounts and organizations, moves
-ingestion and retrieval server-side with real embeddings and pgvector, and ships a secure
-publish + widget path — turning the prototype into the company-safe SaaS platform the spec
-describes.
+deterministic demo mode. **Delivered so far:** the Phase-1 database + RLS foundation, auth +
+per-user assistant persistence (Phases 2–3), and Gemini BYOK. **Still ahead
+(Phases 4–7):** multi-member organizations (invites/roles), cloud ingestion (PDF/DOCX →
+embeddings → pgvector), server-side retrieval, and the new versioned publish + embeddable
+widget path — turning the prototype into the company-safe SaaS platform the spec describes.

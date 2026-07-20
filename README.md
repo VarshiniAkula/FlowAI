@@ -12,21 +12,21 @@ or embeddable widget.
 
 ## 🚧 Current prototype status
 
-**FlowMind is an early-stage work in progress — not production-ready.** Today it runs as a
-working **single-user, browser-local prototype**. The production, multi-tenant backend is
-being built phase by phase; the database + security foundation exists but is **not yet wired
-into the UI**. Expect breaking changes.
+**FlowMind is an early-stage work in progress — not production-ready.** You now sign in with a
+real account, and your assistants are stored in Supabase and isolated per user by Row-Level
+Security. Several subsystems are still stubbed or unbuilt (see below). Expect breaking changes.
 
 | Capability | Status |
 |---|---|
-| Visual builder (Story → Canvas → Test) | ✅ Working (client-side) |
+| Accounts + login (email/password) | ✅ Live — protected routes, session auth (`@supabase/ssr`) |
+| Per-user history (your assistants, isolated by RLS) | ✅ Live — each account sees only its own, persisted in Supabase |
+| Visual builder (Story → Canvas → Test) | ✅ Working |
 | Knowledge upload + retrieval | 🟡 Working for `.txt / .md / .csv / .html` (in-browser index) |
 | LLM answers | 🟡 Real via **session Gemini BYOK** (or a platform key); deterministic demo stub otherwise |
 | Gemini BYOK (bring your own key) | ✅ Connect a key per browser session — validated server-side, encrypted in an HttpOnly cookie, auto-expiring |
-| Database schema + Row-Level Security | ✅ Built & verified, **not yet used by the UI** |
-| Accounts, organizations, multi-tenancy | ❌ Not built yet |
+| Organizations (multi-member, invites, roles, switching) | ❌ Not built — each user gets one personal workspace |
 | Cloud ingestion (PDF/DOCX, embeddings, pgvector) | ❌ Not built yet |
-| Publish + public chat + embeddable widget | ❌ Not built yet |
+| Publish + public chat + embeddable widget | 🟡 Legacy publish/hosted-chat works; new versioned schema + widget not built |
 
 Full, honest breakdown: **[docs/PRODUCT-SUMMARY.md](docs/PRODUCT-SUMMARY.md)**.
 
@@ -34,8 +34,12 @@ Full, honest breakdown: **[docs/PRODUCT-SUMMARY.md](docs/PRODUCT-SUMMARY.md)**.
 
 ## ✅ Working now
 
-Runs entirely on your machine — no account, no cloud, data stored in your browser:
+Sign up for an account, then build — your assistants are cloud-stored and **private to your
+account** (isolated by Row-Level Security):
 
+- **Accounts** — email/password sign up / sign in / sign out; `/dashboard` and `/editor` are
+  protected and redirect to `/login`. On first login you get a personal workspace
+  automatically.
 - **Landing page** and dashboard.
 - **Story Builder** — describe an assistant in plain English → a working flow (deterministic
   heuristic in demo mode; real Gemini generation when a key is connected).
@@ -52,18 +56,15 @@ Runs entirely on your machine — no account, no cloud, data stored in your brow
 
 ## 🗺️ Roadmap
 
-Backend foundation (schema, Row-Level Security, server helpers) is complete and verified but
-not yet connected to the UI. Remaining phases wire it in:
-
 | Phase | Scope | State |
 |---|---|---|
 | 0 | Audit & plan | ✅ Done |
 | 1 | Database schema, RLS, Supabase clients, auth guards | ✅ Done (verify:rls green) |
-| 2 | Auth flows, organizations, membership management | ⬜ Planned |
-| 3 | Supabase-backed assistant persistence (retire localStorage) | ⬜ Planned |
+| 2 | Auth flows (login/signup/logout, route protection) | ✅ Done · organizations (multi-member, invites, roles) ⬜ Planned |
+| 3 | Supabase-backed assistant persistence (retire localStorage) | ✅ Done |
 | 4 | Cloud ingestion (upload → extract → chunk → embed → pgvector) | ⬜ Planned |
 | 5 | Server-side retrieval + authenticated test chat | ⬜ Planned |
-| 6 | Publish flow, public chat endpoint, embeddable widget | ⬜ Planned |
+| 6 | Publish flow (new schema), public chat endpoint, embeddable widget | ⬜ Planned |
 | 7 | Analytics, error-code pass, copy cleanup, final security sweep | ⬜ Planned |
 
 Details: [docs/flowmind-spec.md](docs/flowmind-spec.md) (spec),

@@ -2,6 +2,9 @@
   "name": "@flowmind/web",
   "version": "0.1.0",
   "private": true,
+  "author": "Varshini Akula",
+  "license": "UNLICENSED",
+  "copyright": "© 2026 Varshini Akula. All rights reserved.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

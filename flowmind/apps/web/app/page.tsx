@@ -40,9 +40,9 @@ export default function HomePage() {
               FlowMind
             </span>
           </div>
-          <span>
-            Built with Next.js 15, Tailwind v4, React Flow v12, Supabase +
-            pgvector
+          <span className="text-center">
+            © {new Date().getFullYear()} <strong className="font-semibold text-foreground">Varshini Akula</strong>. All rights reserved.
+            FlowMind and its source are proprietary — no copying or redistribution without permission.
           </span>
         </div>
       </footer>

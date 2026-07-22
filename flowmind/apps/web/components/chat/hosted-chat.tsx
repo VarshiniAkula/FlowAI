@@ -440,7 +440,8 @@ export function HostedChat({ assistantId, embed = false }: Props) {
               className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
             >
               FlowMind
-            </a>
+            </a>{' '}
+            · © {new Date().getFullYear()} Varshini Akula
           </div>
         )}
       </div>

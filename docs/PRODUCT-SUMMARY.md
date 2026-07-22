@@ -1,7 +1,9 @@
 # FlowMind — Full Product Summary
 
-_Last updated: 2026-06-04. This document describes the **actual current state** of the
-codebase, not just the target spec. Where the two differ, both are called out._
+**© 2026 Varshini Akula. All rights reserved.** Proprietary — see [LICENSE](../LICENSE).
+
+_This document describes the **actual current state** of the codebase, not just the target
+spec. Where the two differ, both are called out._
 
 Companion docs: [flowmind-spec.md](flowmind-spec.md) (canonical requirements),
 [flowmind-prompt-pack.md](flowmind-prompt-pack.md) (phased plan),

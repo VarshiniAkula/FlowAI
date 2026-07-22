@@ -1,5 +1,8 @@
 # FlowMind
 
+**© 2026 Varshini Akula. All rights reserved.** — Proprietary. See [LICENSE](LICENSE).
+No copying, redistribution, or derivative works without written permission.
+
 **FlowMind is a visual builder for AI chat assistants.** Describe an assistant in plain
 English or drag nodes onto a canvas to design a conversation flow, ground its answers in
 your own documents (RAG), test it in a live simulator, and publish it as a hosted chat page
@@ -157,3 +160,16 @@ pnpm verify:rls                         # asserts every cross-tenant access is d
 
 This is an actively-changing prototype maintained as a phased build (see the roadmap). The
 `main` branch is the source of truth. Issues and structure may shift between phases.
+
+---
+
+## License & ownership
+
+**FlowMind — including its source code, design, and documentation — is the exclusive property
+of Varshini Akula.**
+
+Copyright © 2026 Varshini Akula. All rights reserved. This is proprietary software; no use,
+copying, modification, or distribution is permitted without prior written permission. See
+[LICENSE](LICENSE) for the full terms.
+
+— *Varshini Akula*

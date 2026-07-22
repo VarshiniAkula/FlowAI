@@ -2,6 +2,9 @@
   "name": "flowmind",
   "version": "0.1.0",
   "private": true,
+  "author": "Varshini Akula",
+  "license": "UNLICENSED",
+  "copyright": "© 2026 Varshini Akula. All rights reserved.",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "dev": "turbo run dev",

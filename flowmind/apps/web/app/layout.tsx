@@ -27,7 +27,13 @@ export const metadata: Metadata = {
   description:
     'A visual, production-grade AI assistant platform with graph runtime, RAG, and one-click deployment.',
   applicationName: 'FlowMind',
-  authors: [{ name: 'FlowMind' }],
+  authors: [{ name: 'Varshini Akula' }],
+  creator: 'Varshini Akula',
+  publisher: 'Varshini Akula',
+  other: {
+    copyright: '© 2026 Varshini Akula. All rights reserved.',
+    author: 'Varshini Akula',
+  },
   keywords: [
     'AI assistant builder',
     'visual flow editor',

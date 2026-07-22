@@ -48,6 +48,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
       // Guarantee a personal workspace exists, then enter the app.
       await ensurePersonalOrg(supabase);
+
+      // Fire-and-forget owner notification (no-ops unless a webhook is set).
+      void fetch('/api/auth/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: isSignup ? 'signup' : 'signin' }),
+      }).catch(() => {});
+
       router.replace(next);
       router.refresh();
     } catch (err) {

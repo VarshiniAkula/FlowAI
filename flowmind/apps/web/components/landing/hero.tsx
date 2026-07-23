@@ -59,7 +59,7 @@ export function Hero() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-mint opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-mint" />
               </span>
-              FlowMind v0.5 is now live
+              Phase 3 live · accounts &amp; private workspaces
             </div>
 
             <h1 className="font-display text-5xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">

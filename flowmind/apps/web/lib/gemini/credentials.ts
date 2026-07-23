@@ -14,6 +14,7 @@ import {
   getByokTtlMinutes,
 } from './limits';
 import type { GeminiStatus } from './types';
+import { getFallbackProvider } from '@/lib/llm/fallback';
 
 /**
  * The single source of truth for Gemini credential precedence:
@@ -80,6 +81,11 @@ export async function getGeminiStatus(): Promise<GeminiStatus> {
     };
   }
   if (source.mode === 'platform') {
+    return { connected: true, mode: 'platform' };
+  }
+  // A configured fallback provider (Grok/Llama) still means real AI is
+  // available — report platform mode so the UI doesn't show "demo mode".
+  if (getFallbackProvider()) {
     return { connected: true, mode: 'platform' };
   }
   return { connected: false, mode: 'fallback' };

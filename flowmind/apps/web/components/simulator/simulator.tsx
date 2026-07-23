@@ -171,9 +171,9 @@ export function Simulator({ assistantId }: Props) {
         </div>
 
         {gemini.status?.mode === 'fallback' && (
-          <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-5 py-2 text-xs text-amber-800 dark:text-amber-200">
-            <span className="font-semibold">Demo mode.</span> LLM responses use deterministic
-            simulations. Connect Gemini for real AI responses.
+          <div className="shrink-0 border-b border-amber-400/50 bg-amber-100 px-5 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-100">
+            <span className="font-bold">Demo mode.</span> LLM responses are simulated. Connect a
+            key for real AI responses.
           </div>
         )}
 

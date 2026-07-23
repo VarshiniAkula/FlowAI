@@ -134,9 +134,9 @@ export function StoryBuilder({ assistantId }: Props) {
         </div>
 
         {gemini.status?.mode === 'fallback' && (
-          <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-            <span className="font-semibold">Demo mode.</span> Flow generation uses a deterministic
-            simulation. Connect Gemini for real AI responses.
+          <div className="mb-6 rounded-lg border border-amber-400/50 bg-amber-100 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-100">
+            <span className="font-bold">Demo mode.</span> Flow generation is simulated. Connect a
+            key for real AI responses.
           </div>
         )}
 

@@ -56,7 +56,7 @@ export function GeminiStatusBadge({
         )}
       >
         <ShieldCheck className="size-3.5" />
-        Gemini available
+        AI available
       </span>
     );
   }

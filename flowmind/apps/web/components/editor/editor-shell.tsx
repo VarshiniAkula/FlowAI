@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import {
   Brain,
   ArrowLeft,
-  BookOpen,
   Workflow,
   Database,
   Beaker,
@@ -22,7 +21,7 @@ import { useGraphStore } from '@/stores/graph-store';
 import { cn } from '@/lib/utils';
 
 const TABS = [
-  { id: 'story', label: 'Story', icon: BookOpen },
+  // Story is hidden for now; Canvas is the entry point.
   { id: 'canvas', label: 'Canvas', icon: Workflow },
   { id: 'knowledge', label: 'Knowledge', icon: Database },
   { id: 'test', label: 'Test', icon: Beaker },
@@ -88,7 +87,7 @@ export function EditorShell({
     return () => clearTimeout(t);
   }, [nodes, edges, hydrated, assistant, assistantId, saveGraph]);
 
-  const currentTab = TABS.find((t) => pathname.endsWith(`/${t.id}`))?.id || 'story';
+  const currentTab = TABS.find((t) => pathname.endsWith(`/${t.id}`))?.id || 'canvas';
 
   const handleManualSave = () => {
     if (!assistant) return;

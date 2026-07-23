@@ -6,6 +6,7 @@ import {
 import { GeminiError, mapUpstreamError } from '@/lib/gemini/errors';
 import { LIMITS } from '@/lib/gemini/limits';
 import { assertSameOrigin, errorResponse, jsonNoStore } from '@/lib/gemini/request';
+import { getFallbackProvider, fallbackGenerateText, fallbackStreamText } from '@/lib/llm/fallback';
 
 export const runtime = 'nodejs';
 
@@ -60,6 +61,25 @@ export async function POST(req: Request) {
     }
 
     if (cred.mode === 'fallback') {
+      // No Gemini credential: use a configured fallback provider (Grok/Llama)
+      // for real AI, else the deterministic demo stub.
+      const provider = getFallbackProvider();
+      if (provider) {
+        const r = await fallbackGenerateText({
+          provider,
+          systemPrompt: systemPrompt || undefined,
+          userPrompt,
+          temperature: body.temperature,
+        });
+        return jsonNoStore({
+          text: r.text,
+          source: provider.name,
+          providerMode: 'fallback-provider',
+          model: r.model,
+          inputTokens: r.inputTokens,
+          outputTokens: r.outputTokens,
+        });
+      }
       return jsonNoStore({
         text: stubReply(systemPrompt, userPrompt),
         source: 'stub',
@@ -102,12 +122,31 @@ function streamResponse({ cred, systemPrompt, userPrompt, temperature }: StreamA
     async start(controller) {
       try {
         if (cred.mode === 'fallback') {
-          const full = stubReply(systemPrompt, userPrompt);
-          for (const piece of chunkStub(full)) {
-            controller.enqueue(sse('chunk', { delta: piece }));
-            await sleep(20);
+          const provider = getFallbackProvider();
+          if (!provider) {
+            const full = stubReply(systemPrompt, userPrompt);
+            for (const piece of chunkStub(full)) {
+              controller.enqueue(sse('chunk', { delta: piece }));
+              await sleep(20);
+            }
+            controller.enqueue(sse('done', { text: full, source: 'stub', providerMode: 'fallback' }));
+            controller.close();
+            return;
           }
-          controller.enqueue(sse('done', { text: full, source: 'stub', providerMode: 'fallback' }));
+          const fb = await fallbackStreamText({
+            provider,
+            systemPrompt: systemPrompt || undefined,
+            userPrompt,
+            temperature,
+          });
+          let full = '';
+          for await (const delta of fb.deltas) {
+            full += delta;
+            controller.enqueue(sse('chunk', { delta }));
+          }
+          controller.enqueue(
+            sse('done', { text: full, source: provider.name, providerMode: 'fallback-provider', model: fb.model }),
+          );
           controller.close();
           return;
         }

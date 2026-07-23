@@ -1,11 +1,9 @@
 /**
- * Tiny BM25-lite scorer for the in-browser knowledge store.
- *
- * Real Phase-2/3 work will swap this for pgvector + reranking, but for the
- * Phase-1 simulator we just need *something* that returns relevant chunks
- * deterministically and without a network round-trip.
+ * BM25-lite relevance scorer. Pure and dependency-free so it runs both in the
+ * browser and on the server (the ingestion/retrieval routes use it to rank
+ * chunks fetched from Supabase). Vector embeddings + pgvector are a later
+ * enhancement; this keeps retrieval useful without an embedding key.
  */
-import type { IndexedChunk } from './store';
 
 const STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were',
@@ -24,35 +22,28 @@ function tokenize(s: string): string[] {
     .filter((t) => t.length > 1 && !STOP_WORDS.has(t));
 }
 
-export interface SearchHit {
-  chunk: IndexedChunk;
+export interface ScoredIndex {
+  index: number;
   score: number;
 }
 
-export function searchChunks(
-  query: string,
-  chunks: IndexedChunk[],
-  topK = 4,
-): SearchHit[] {
+/** Rank `texts` against `query`, returning the top-K positions (by score, desc). */
+export function scoreTexts(query: string, texts: string[], topK = 4): ScoredIndex[] {
   const qTokens = tokenize(query);
-  if (qTokens.length === 0 || chunks.length === 0) return [];
+  if (qTokens.length === 0 || texts.length === 0) return [];
 
-  // Document frequency for IDF
+  const tokenized = texts.map(tokenize);
   const df = new Map<string, number>();
-  for (const c of chunks) {
-    const seen = new Set(tokenize(c.text));
-    for (const t of seen) df.set(t, (df.get(t) ?? 0) + 1);
+  for (const toks of tokenized) {
+    for (const t of new Set(toks)) df.set(t, (df.get(t) ?? 0) + 1);
   }
 
-  const N = chunks.length;
-  const avgLen =
-    chunks.reduce((sum, c) => sum + tokenize(c.text).length, 0) / N || 1;
-
+  const N = texts.length;
+  const avgLen = tokenized.reduce((sum, t) => sum + t.length, 0) / N || 1;
   const k1 = 1.5;
   const b = 0.75;
 
-  const scored: SearchHit[] = chunks.map((chunk) => {
-    const tokens = tokenize(chunk.text);
+  const scored: ScoredIndex[] = tokenized.map((tokens, index) => {
     const tf = new Map<string, number>();
     for (const t of tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
 
@@ -65,12 +56,11 @@ export function searchChunks(
       const norm = 1 - b + b * (tokens.length / avgLen);
       score += idf * ((f * (k1 + 1)) / (f + k1 * norm));
     }
-
-    return { chunk, score };
+    return { index, score };
   });
 
   return scored
-    .filter((h) => h.score > 0)
+    .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }

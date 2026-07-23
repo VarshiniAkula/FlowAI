@@ -20,9 +20,10 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAssistantStore } from '@/stores/assistant-store';
-import { useKnowledgeStore } from '@/lib/knowledge/store';
+import { dbListDocuments, type KnowledgeDoc } from '@/lib/db/knowledge';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { NODE_LABELS, NODE_COLORS, type NodeType } from '@flowmind/shared';
-import type { Assistant, GraphEdge, GraphNode, KnowledgeSource } from '@flowmind/shared';
+import type { Assistant, GraphEdge, GraphNode } from '@flowmind/shared';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -56,38 +57,31 @@ interface AnalyticsSummary {
 export function AnalyticsPanel({ assistantId }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [assistant, setAssistant] = useState<Assistant | undefined>(undefined);
-  const [documents, setDocuments] = useState<KnowledgeSource[]>([]);
+  const [documents, setDocuments] = useState<KnowledgeDoc[]>([]);
   const [chunkCount, setChunkCount] = useState(0);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryFetchedAt, setSummaryFetchedAt] = useState<number | null>(null);
 
-  // Imperative subscriptions to avoid React 19 + Zustand persist snapshot issues.
+  // Assistant comes from the (Supabase-backed) store; knowledge documents are
+  // fetched from Supabase (RLS-scoped to the user's org).
   useEffect(() => {
     const readAssistant = () => useAssistantStore.getState().getAssistant(assistantId);
-    const readDocs = () =>
-      useKnowledgeStore
-        .getState()
-        .documents.filter((d) => d.assistantId === assistantId);
-    const readChunks = () =>
-      useKnowledgeStore
-        .getState()
-        .chunks.filter((c) => c.assistantId === assistantId).length;
-
     setAssistant(readAssistant());
-    setDocuments(readDocs());
-    setChunkCount(readChunks());
     setHydrated(true);
-
     const unsubA = useAssistantStore.subscribe(() => setAssistant(readAssistant()));
-    const unsubK = useKnowledgeStore.subscribe(() => {
-      setDocuments(readDocs());
-      setChunkCount(readChunks());
-    });
+
+    const supabase = createSupabaseBrowserClient();
+    dbListDocuments(supabase, assistantId)
+      .then((docs) => {
+        setDocuments(docs);
+        setChunkCount(docs.reduce((sum, d) => sum + d.chunkCount, 0));
+      })
+      .catch((err) => console.error('[analytics] knowledge load failed', err));
+
     return () => {
       unsubA();
-      unsubK();
     };
   }, [assistantId]);
 

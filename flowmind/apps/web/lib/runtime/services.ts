@@ -1,5 +1,6 @@
 import type { RetrievedChunk, RuntimeServices } from '@flowmind/shared';
-import { useKnowledgeStore } from '@/lib/knowledge/store';
+import { dbSearchChunks } from '@/lib/db/knowledge';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 /**
  * Default in-memory services suitable for the Simulator.
@@ -10,16 +11,18 @@ import { useKnowledgeStore } from '@/lib/knowledge/store';
  *   the server.
  */
 export function createSimulatorServices(assistantId: string): RuntimeServices {
+  const supabase = createSupabaseBrowserClient();
   return {
     retrieval: {
       async query(query: string, topK: number): Promise<RetrievedChunk[]> {
-        const hits = useKnowledgeStore.getState().search(assistantId, query, topK);
+        // Retrieve from Supabase-stored chunks (RLS-scoped to the user's org).
+        const hits = await dbSearchChunks(supabase, assistantId, query, topK);
         return hits.map((h) => ({
-          content: h.chunk.text,
-          source: h.chunk.documentId,
+          content: h.content,
+          source: h.documentName,
           score: h.score,
-          documentId: h.chunk.documentId,
-          metadata: { chunkIndex: h.chunk.index },
+          documentId: h.documentId,
+          metadata: { chunkIndex: h.chunkIndex, documentName: h.documentName },
         }));
       },
     },

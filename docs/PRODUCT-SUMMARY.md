@@ -31,7 +31,7 @@ the whole point of this document:
 | Data home | **Supabase Postgres with RLS** (assistants) | Supabase Postgres with RLS |
 | Auth | **Email/password login (`@supabase/ssr`)** | Supabase Auth + org membership |
 | Tenancy | **Per-user isolation** (one personal org each) | Multi-tenant orgs + roles |
-| Knowledge | In-browser index, `.txt/.md/.csv/.html` | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
+| Knowledge | **Supabase Storage + server-parsed chunks** (`.txt/.md/.csv/.html`) | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
 | Retrieval | In-browser keyword/vector search | Server-side pgvector (HNSW, cosine) |
 | LLM | Session **BYOK** or platform key → Gemini; else a deterministic demo **stub** | Gemini `gemini-2.5-flash` + `text-embedding-004` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
@@ -115,17 +115,19 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - The canvas is intentionally dark (a builder aesthetic), with a categorical color per node
   type.
 
-### 3.6 Knowledge / ingestion — 🟡
-- **Works:** upload `.txt`, `.md`, `.csv`, `.html` (≤ 4 MB). The file is parsed server-side
-  (`POST /api/parse-document`, strips HTML), chunked, and indexed in an **in-browser**
-  knowledge store (`flowmind-knowledge` in `localStorage`). The page lists documents with a
-  chunk count + status, and has a **Test Retrieval** box that runs the search live.
-- **Not supported here:** `.pdf` and `.docx` (the parse route explicitly rejects them —
-  "coming in Phase 2"). No private cloud storage, no embeddings, no server-side index.
-- **Target (Phase 4):** direct upload to private Supabase Storage → a **Supabase Edge
-  Function** (Deno) extracts (pdfjs-dist, mammoth), chunks (~1000 tokens/150 overlap),
-  embeds (Gemini `text-embedding-004`, 768-dim), and bulk-inserts `document_chunks` — all
-  off-Vercel, async, with status polling.
+### 3.6 Knowledge / ingestion — ✅ (Supabase-backed) / 🟡 (no embeddings yet)
+- **Works:** upload `.txt`, `.md`, `.csv`, `.html` (≤ 4 MB). `POST /api/knowledge/ingest`
+  (guarded) stores the raw file in the **private `knowledge-files` Supabase Storage bucket**
+  at `orgs/{org}/assistants/{assistant}/documents/{doc}/…`, parses + chunks it **server-side**,
+  and writes `documents` + `document_chunks` rows — all RLS-scoped to the user's org.
+  `DELETE /api/knowledge/[id]` removes the row, chunks (cascade), and the stored file.
+- **Retrieval:** the Knowledge tab lists documents and the Simulator's RAG both read chunks
+  from Supabase (RLS-scoped) and rank with a BM25-lite scorer. Verified end-to-end.
+- **Not yet:** `.pdf`/`.docx` extraction, and **vector embeddings** (the `embedding vector(768)`
+  column is populated later; retrieval is keyword/BM25 for now). Files:
+  `app/api/knowledge/*`, `lib/db/knowledge.ts`, `lib/knowledge/{extract,chunker,score}.ts`.
+- **Target (Phase 4+):** heavy extraction (pdfjs-dist, mammoth) + Gemini `text-embedding-004`
+  (768-dim) in a **Supabase Edge Function**, then pgvector (HNSW, cosine) retrieval.
 
 ### 3.7 Retrieval / RAG — 🟡
 - **Works:** the in-browser store's `search(assistantId, query, topK)` does relevance
@@ -262,7 +264,7 @@ previous live demo lived in that old project, so those `/chat/…` links reset a
 - **Framework:** Next.js 15.5 (App Router, RSC), React 19, TypeScript strict.
 - **Styling:** Tailwind CSS v4, Radix UI primitives, lucide-react icons, sonner toasts.
 - **Canvas:** React Flow (`@xyflow/react`) v12.
-- **State:** Zustand (assistants are Supabase-backed and RLS-isolated; knowledge remains an in-browser store for now).
+- **State:** Zustand (assistants + knowledge are Supabase-backed and RLS-isolated; files in Supabase Storage).
 - **Validation:** Zod (shared validators in `packages/shared`).
 - **AI:** Google Gemini (`@google/generative-ai`) — `gemini-2.0-flash-exp` today; spec
   targets `gemini-2.5-flash` + `text-embedding-004`.
@@ -314,8 +316,8 @@ still an in-browser store for now.
 
 - ❌ Multi-member organizations, roles, members, invitations, org switching (each user gets
   one personal workspace).
-- ❌ Knowledge saved to Supabase (still an in-browser store) — assistants ARE cloud-stored.
-- ❌ PDF/DOCX ingestion; cloud file storage; real embeddings; server-side pgvector retrieval.
+- ❌ PDF/DOCX ingestion; real embeddings; server-side pgvector (vector) retrieval — knowledge
+  IS in Supabase Storage now, but retrieval is keyword/BM25, not vector.
 - ❌ Real LLM answers unless a Gemini key is connected (session BYOK) or a platform key is set.
 - ❌ Organization-scoped / persisted Gemini credentials; BYOK for published widgets (BYOK is
   session-only, by design).

@@ -24,7 +24,7 @@ Security. Several subsystems are still stubbed or unbuilt (see below). Expect br
 | Accounts + login (email/password) | ✅ Live — protected routes, session auth (`@supabase/ssr`) |
 | Per-user history (your assistants, isolated by RLS) | ✅ Live — each account sees only its own, persisted in Supabase |
 | Visual builder (Story → Canvas → Test) | ✅ Working |
-| Knowledge upload + retrieval | 🟡 Working for `.txt / .md / .csv / .html` (in-browser index) |
+| Knowledge upload + retrieval | ✅ Files in **Supabase Storage**, parsed + chunked server-side, per-user retrieval (`.txt / .md / .csv / .html`) |
 | LLM answers | 🟡 Real via **session Gemini BYOK** (or a platform key); deterministic demo stub otherwise |
 | Gemini BYOK (bring your own key) | ✅ Connect a key per browser session — validated server-side, encrypted in an HttpOnly cookie, auto-expiring |
 | Organizations (multi-member, invites, roles, switching) | ❌ Not built — each user gets one personal workspace |
@@ -48,8 +48,9 @@ account** (isolated by Row-Level Security):
   heuristic in demo mode; real Gemini generation when a key is connected).
 - **Visual Canvas** — drag nodes, wire them, edit each node in the inspector, auto-saved.
   Executable node types: message, input, choice, condition, RAG query, LLM response.
-- **Knowledge** — upload `.txt / .md / .csv / .html`; it's parsed, chunked, indexed, and
-  searchable (with a built-in retrieval tester).
+- **Knowledge** — upload `.txt / .md / .csv / .html`; the file is stored in **private Supabase
+  Storage**, parsed + chunked **on the server** into `document_chunks`, and retrieved per-user
+  via RLS (with a built-in retrieval tester). PDF/DOCX and vector embeddings are next.
 - **Test simulator** — run the whole flow with a live execution trace and variable capture.
   LLM nodes return a deterministic demo response until a Gemini key is connected.
 - **Gemini BYOK** — click **Connect Gemini** (dashboard / editor) to add your own key for the

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Database,
   Upload,
@@ -13,9 +13,13 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useKnowledgeStore } from '@/lib/knowledge/store';
-import type { SearchHit } from '@/lib/knowledge/search';
-import type { KnowledgeSource } from '@flowmind/shared';
+import {
+  dbListDocuments,
+  dbSearchChunks,
+  type KnowledgeDoc,
+  type RetrievedChunk,
+} from '@/lib/db/knowledge';
+import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -23,32 +27,33 @@ interface Props {
 }
 
 export function KnowledgeManager({ assistantId }: Props) {
-  // Subscribe to the knowledge store imperatively to avoid React 19 +
-  // Zustand persist `useSyncExternalStore` snapshot-stability issues.
-  const [documents, setDocuments] = useState<KnowledgeSource[]>([]);
-
-  useEffect(() => {
-    const read = () =>
-      useKnowledgeStore
-        .getState()
-        .documents.filter((d) => d.assistantId === assistantId);
-    setDocuments(read());
-    const unsub = useKnowledgeStore.subscribe(() => setDocuments(read()));
-    return unsub;
-  }, [assistantId]);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [documents, setDocuments] = useState<KnowledgeDoc[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
 
-  // Test-search panel state
   const [query, setQuery] = useState('');
-  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [hits, setHits] = useState<RetrievedChunk[]>([]);
   const [searched, setSearched] = useState(false);
+  const [searching, setSearching] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  const loadDocs = useCallback(async () => {
+    try {
+      setDocuments(await dbListDocuments(supabase, assistantId));
+    } catch (err) {
+      console.error('[knowledge] load failed', err);
+    } finally {
+      setLoaded(true);
+    }
+  }, [supabase, assistantId]);
+
+  useEffect(() => {
+    void loadDocs();
+  }, [loadDocs]);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -58,30 +63,49 @@ export function KnowledgeManager({ assistantId }: Props) {
       for (const file of Array.from(files)) {
         const fd = new FormData();
         fd.append('file', file);
-        const res = await fetch('/api/parse-document', { method: 'POST', body: fd });
+        fd.append('assistantId', assistantId);
+        const res = await fetch('/api/knowledge/ingest', { method: 'POST', body: fd });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `Upload failed (${res.status})`);
+          throw new Error(body?.error?.message || `Upload failed (${res.status})`);
         }
-        const { name, text } = await res.json();
-        useKnowledgeStore.getState().addDocument(assistantId, name, text);
       }
-    } catch (err: any) {
-      setError(err.message || 'Upload failed');
+      await loadDocs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
 
-  const runSearch = () => {
+  const deleteDoc = async (id: string) => {
+    // Optimistic removal, then reconcile.
+    setDocuments((docs) => docs.filter((d) => d.id !== id));
+    try {
+      await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
+    } finally {
+      await loadDocs();
+    }
+  };
+
+  const runSearch = async () => {
     if (!query.trim()) {
       setHits([]);
       setSearched(false);
       return;
     }
-    setHits(useKnowledgeStore.getState().search(assistantId, query, 5));
-    setSearched(true);
+    setSearching(true);
+    try {
+      setHits(await dbSearchChunks(supabase, assistantId, query, 5));
+      setSearched(true);
+    } catch (err) {
+      console.error('[knowledge] search failed', err);
+      setHits([]);
+      setSearched(true);
+    } finally {
+      setSearching(false);
+    }
   };
 
   return (
@@ -92,11 +116,12 @@ export function KnowledgeManager({ assistantId }: Props) {
             <Database className="size-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Knowledge</h1>
+            <h1 className="font-display text-2xl font-bold tracking-tight">Knowledge</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload documents your assistant can reference. Use a{' '}
-              <code className="rounded bg-muted px-1 text-[11px]">RAG Query</code> node
-              on the canvas to retrieve them at runtime.
+              Files are stored privately in Supabase Storage, parsed and chunked on the server,
+              and retrieved with a{' '}
+              <code className="rounded bg-muted px-1 text-[11px]">RAG Query</code> node at
+              runtime.
             </p>
           </div>
         </div>
@@ -165,11 +190,15 @@ export function KnowledgeManager({ assistantId }: Props) {
         <div className="mt-8">
           <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <FileText className="size-3.5" /> Documents{' '}
-            {mounted && documents.length > 0 && (
+            {loaded && documents.length > 0 && (
               <span className="text-muted-foreground">({documents.length})</span>
             )}
           </h2>
-          {!mounted ? null : documents.length === 0 ? (
+          {!loaded ? (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" /> Loading…
+            </div>
+          ) : documents.length === 0 ? (
             <div className="rounded-lg border border-dashed bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
               No documents yet. Upload one above to get started.
             </div>
@@ -195,7 +224,7 @@ export function KnowledgeManager({ assistantId }: Props) {
                         ) : null}
                         {doc.status}
                       </Badge>
-                      <span>{doc.chunkCount ?? 0} chunks</span>
+                      <span>{doc.chunkCount} chunks</span>
                       <span>·</span>
                       <span>{new Date(doc.createdAt).toLocaleString()}</span>
                     </div>
@@ -203,8 +232,9 @@ export function KnowledgeManager({ assistantId }: Props) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => useKnowledgeStore.getState().removeDocument(doc.id)}
+                    onClick={() => void deleteDoc(doc.id)}
                     className="text-muted-foreground hover:text-rose-500"
+                    aria-label={`Delete ${doc.name}`}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -214,8 +244,8 @@ export function KnowledgeManager({ assistantId }: Props) {
           )}
         </div>
 
-        {/* Test search */}
-        {mounted && documents.length > 0 && (
+        {/* Test retrieval */}
+        {loaded && documents.length > 0 && (
           <div className="mt-10">
             <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Search className="size-3.5" /> Test retrieval
@@ -225,12 +255,13 @@ export function KnowledgeManager({ assistantId }: Props) {
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && runSearch()}
+                  onKeyDown={(e) => e.key === 'Enter' && void runSearch()}
                   placeholder="Ask a question your bot might receive..."
                   className="flex-1 rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <Button onClick={runSearch} variant="gradient" size="sm">
-                  <Search className="size-3.5" /> Search
+                <Button onClick={() => void runSearch()} variant="gradient" size="sm" disabled={searching}>
+                  {searching ? <Loader2 className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+                  Search
                 </Button>
               </div>
               {searched && (
@@ -240,19 +271,19 @@ export function KnowledgeManager({ assistantId }: Props) {
                       No matches.
                     </div>
                   ) : (
-                    hits.map((h) => (
+                    hits.map((h, i) => (
                       <div
-                        key={h.chunk.id}
+                        key={`${h.documentId}-${h.chunkIndex}-${i}`}
                         className="rounded-md border bg-background px-3 py-2"
                       >
                         <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
                           <span className="font-mono">
-                            {h.chunk.documentId} · chunk #{h.chunk.index}
+                            {h.documentName} · chunk #{h.chunkIndex}
                           </span>
                           <span>score {h.score.toFixed(3)}</span>
                         </div>
                         <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed">
-                          {h.chunk.text}
+                          {h.content}
                         </p>
                       </div>
                     ))

@@ -32,7 +32,7 @@ the whole point of this document:
 | Auth | **Email/password login (`@supabase/ssr`)** | Supabase Auth + org membership |
 | Tenancy | **Per-user isolation** (one personal org each) | Multi-tenant orgs + roles |
 | Knowledge | **Supabase Storage + server-parsed chunks** (`.txt/.md/.csv/.html`) | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
-| Retrieval | In-browser keyword/vector search | Server-side pgvector (HNSW, cosine) |
+| Retrieval | **Supabase-scoped BM25-lite** (RLS-filtered, lexical) | Server-side pgvector (HNSW, cosine) |
 | LLM | LLM Response node: **Gemini BYOK** → **FlowMind Groq demo** (limited, atomically capped) → platform Gemini (opt-in) → deterministic simulation | Gemini `gemini-2.0-flash` · Groq `openai/gpt-oss-20b` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
@@ -130,14 +130,16 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   (768-dim) in a **Supabase Edge Function**, then pgvector (HNSW, cosine) retrieval.
 
 ### 3.7 Retrieval / RAG — 🟡
-- **Works:** the in-browser store's `search(assistantId, query, topK)` does relevance
-  scoring over the indexed chunks and returns ranked hits with scores. Verified live:
-  a baggage-fee query correctly surfaced the "BAGGAGE ALLOWANCE" chunk on top.
-- **Prototype-grade:** it's client-side and keyword/similarity-based, scoped by assistant
-  in the browser — not pgvector.
-- **Target (Phase 5):** `retrieveRelevantChunks()` calls a Postgres `match_document_chunks`
-  function doing cosine similarity over an HNSW index, filtered by `org_id`/`assistant_id`
-  at the SQL layer, embedding the query with Gemini `RETRIEVAL_QUERY`.
+- **Works:** `dbSearchChunks(assistantId, query, topK)` fetches the assistant's chunks from
+  **Supabase** (RLS-scoped to the user's org) and ranks them with a **BM25-lite** scorer
+  (`lib/knowledge/score.ts`), returning ranked hits with scores. Verified live: a baggage-fee
+  query correctly surfaced the "BAGGAGE ALLOWANCE" chunk on top. The simulator's RAG node uses
+  this same path.
+- **Prototype-grade:** ranking is lexical (BM25-lite), not semantic — the `embedding vector(768)`
+  column exists but is unpopulated, so there is no vector similarity yet.
+- **Target:** populate embeddings on ingest and switch retrieval to a Postgres
+  `match_document_chunks` function doing cosine similarity over the HNSW index, filtered by
+  `org_id`/`assistant_id` at the SQL layer, with the query embedded server-side.
 
 ### 3.8 Test simulator — ✅ with caveat
 - **Works:** the "Test" tab runs the whole graph **client-side** with a real execution
@@ -295,8 +297,9 @@ previous live demo lived in that old project, so those `/chat/…` links reset a
 - **Canvas:** React Flow (`@xyflow/react`) v12.
 - **State:** Zustand (assistants + knowledge are Supabase-backed and RLS-isolated; files in Supabase Storage).
 - **Validation:** Zod (shared validators in `packages/shared`).
-- **AI:** Google Gemini (`@google/generative-ai`) — `gemini-2.0-flash-exp` today; spec
-  targets `gemini-2.5-flash` + `text-embedding-004`.
+- **AI:** Google Gemini via **`@google/genai`** — default `gemini-2.0-flash` (configurable);
+  Groq via **`groq-sdk`** — `openai/gpt-oss-20b` for the LLM Response node demo. Embeddings
+  (`text-embedding-004`) are planned, not yet wired.
 - **Backend (foundation):** Supabase (`supabase-js` + `@supabase/ssr`), Postgres + pgvector
   (HNSW), private Storage; ingestion targets a Deno Edge Function.
 - **Monorepo:** pnpm workspaces + Turbo; `@flowmind/shared` package for types/constants/validators.
@@ -344,8 +347,9 @@ Run `pnpm --filter @flowmind/web dev`, open `localhost:3000` (needs Supabase env
    to return to demo mode.
 8. Publish to the hosted-chat path and open `/chat/[id]`.
 
-Your assistants are **cloud-stored and private to your account** (RLS-isolated). Knowledge is
-still an in-browser store for now.
+Your assistants **and** their knowledge are **cloud-stored and private to your account**
+(RLS-isolated); uploaded files live in private Supabase Storage. Retrieval is server-side
+(RLS-scoped BM25-lite) — semantic/vector search is the next step.
 
 ## 10. What does **not** work yet
 

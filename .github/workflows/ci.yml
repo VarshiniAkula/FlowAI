@@ -1,0 +1,56 @@
+name: CI
+
+# Type-check, unit tests, and a production build on every push to main and every
+# pull request. The app lives in the pnpm workspace under `flowmind/`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes to a PR).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: type-check · test · build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flowmind
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: flowmind/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm --filter @flowmind/web type-check
+
+      - name: Unit tests
+        run: pnpm --filter @flowmind/web test
+
+      - name: Production build
+        run: pnpm --filter @flowmind/web build
+        env:
+          # Build-time placeholders only — the app reads real Supabase creds at
+          # request time, never at build. These keep any incidental env reads
+          # from failing the compile; they are NOT secrets.
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+          NEXT_PUBLIC_APP_URL: http://localhost:3000

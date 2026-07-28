@@ -98,8 +98,8 @@ FlowMind/                   ← repository root
 ## Tech stack
 
 Next.js 15 (App Router, RSC) · React 19 · TypeScript (strict) · Tailwind CSS v4 ·
-React Flow v12 · Zustand · Zod · Google Gemini · Supabase (Postgres + pgvector, Auth,
-Storage) · pnpm workspaces + Turbo.
+React Flow v12 · Zustand · Zod · Google Gemini (`@google/genai`) · Groq (`groq-sdk`) ·
+Supabase (Postgres + pgvector, Auth, Storage) · Vitest · pnpm workspaces + Turbo.
 
 ---
 

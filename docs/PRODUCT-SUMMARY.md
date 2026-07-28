@@ -36,9 +36,11 @@ the whole point of this document:
 | LLM | LLM Response node: **Gemini BYOK** → **FlowMind Groq demo** (limited, atomically capped) → platform Gemini (opt-in) → deterministic simulation | Gemini `gemini-2.0-flash` · Groq `openai/gpt-oss-20b` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
-Today's app has **real accounts and per-user assistant history** backed by Supabase + RLS
-(auth + assistant persistence, Phases 2–3). Multi-member organizations, cloud ingestion,
-server-side retrieval, and the new publish/widget path (Phases 4–7) are not built yet.
+Today's app has **real accounts and per-user assistant history** backed by Supabase + RLS,
+**server-side knowledge ingestion + vector retrieval** (Gemini embeddings, pgvector cosine,
+BM25 fallback), **real LLM answers** (Gemini BYOK or the FlowMind Groq demo), and an **offline
+eval harness**. Multi-member organizations, PDF/DOCX extraction, and the new versioned
+publish + embeddable-widget path are not built yet.
 
 ---
 
@@ -58,8 +60,9 @@ FlowAI/                          # repository root (product = FlowMind)
 - **`flowmind/apps/web/`** is the live implementation.
 - An older Python/React prototype (formerly `flowchat/`, once called "FlowChat") was
   **removed** from the repo; it's recoverable from git history if ever needed.
-- A **live demo** runs at `flowmind-nine-tau.vercel.app`, served from a **legacy Supabase
-  project** that is intentionally left untouched by the new work.
+- A **live demo** runs at `flowmind-nine-tau.vercel.app`, served from the **single consolidated
+  Supabase project** (auth + per-user assistants **and** the legacy publish/hosted-chat demo
+  tables recreated via migration `0008`; see §5).
 
 ---
 
@@ -106,7 +109,7 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 ### 3.5 Visual Canvas Builder — ✅
 - Drag nodes from the palette onto a React Flow canvas; connect them; edit each node's
   fields in the right-hand **inspector**; changes reflect live and auto-save (debounced) to
-  `localStorage`.
+  the Supabase `assistants` table (RLS-scoped), not localStorage.
 - **Node types with working runtime handlers (6):** `message`, `input`, `choice`,
   `condition`, `rag_query`, `llm_response`.
 - **Defined in shared constants but NOT executable** (no runtime handler, not in the
@@ -115,19 +118,20 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - The canvas is intentionally dark (a builder aesthetic), with a categorical color per node
   type.
 
-### 3.6 Knowledge / ingestion — ✅ (Supabase-backed) / 🟡 (no embeddings yet)
+### 3.6 Knowledge / ingestion — ✅ (Supabase-backed, embedded)
 - **Works:** upload `.txt`, `.md`, `.csv`, `.html` (≤ 4 MB). `POST /api/knowledge/ingest`
   (guarded) stores the raw file in the **private `knowledge-files` Supabase Storage bucket**
   at `orgs/{org}/assistants/{assistant}/documents/{doc}/…`, parses + chunks it **server-side**,
   and writes `documents` + `document_chunks` rows — all RLS-scoped to the user's org.
   `DELETE /api/knowledge/[id]` removes the row, chunks (cascade), and the stored file.
-- **Retrieval:** the Knowledge tab lists documents and the Simulator's RAG both read chunks
-  from Supabase (RLS-scoped) and rank with a BM25-lite scorer. Verified end-to-end.
-- **Not yet:** `.pdf`/`.docx` extraction, and **vector embeddings** (the `embedding vector(768)`
-  column is populated later; retrieval is keyword/BM25 for now). Files:
-  `app/api/knowledge/*`, `lib/db/knowledge.ts`, `lib/knowledge/{extract,chunker,score}.ts`.
-- **Target (Phase 4+):** heavy extraction (pdfjs-dist, mammoth) + Gemini `text-embedding-004`
-  (768-dim) in a **Supabase Edge Function**, then pgvector (HNSW, cosine) retrieval.
+- **Embeddings:** on ingest, chunks are embedded with Gemini `gemini-embedding-001`
+  (`RETRIEVAL_DOCUMENT`, 768-dim) when a Gemini key is available and stored in
+  `document_chunks.embedding`; without a key they are stored unembedded and retrieval uses BM25.
+- **Retrieval:** see §3.7 — vector cosine search with a BM25 fallback, both via
+  `POST /api/knowledge/search`.
+- **Not yet:** `.pdf`/`.docx` extraction. Files: `app/api/knowledge/*`,
+  `lib/gemini/embeddings.ts`, `lib/db/knowledge.ts`, `lib/knowledge/{extract,chunker,score}.ts`.
+- **Target:** heavy extraction (pdfjs-dist, mammoth), ideally in a Supabase Edge Function.
 
 ### 3.7 Retrieval / RAG — ✅ (vector) / 🟡 (needs a Gemini key)
 - **Works:** `POST /api/knowledge/search` embeds the query server-side (Gemini
@@ -156,7 +160,7 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   prompt / provider outage before the first token) it returns a clearly-labeled deterministic
   simulation. The execution trace shows the provider, mode, model, token counts, and remaining
   demo allowance. No key material or provider reasoning ever appears in responses or traces.
-- **Target (Phase 5):** an authenticated `POST /api/assistants/[id]/test-chat` endpoint
+- **Target:** an authenticated `POST /api/assistants/[id]/test-chat` endpoint
   doing server-side retrieval + Gemini, using the live assistant graph/settings.
 
 ### 3.9 Publish / hosted chat / widget — 🟡 (legacy) / ❌ (target)
@@ -167,12 +171,12 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - **Not built (target):** publish against the **new** `published_assistants` schema with
   versioning + unguessable IDs; the **public** `POST /api/chat/[publicId]` endpoint (CORS
   `*`, rate limiting, service-role runtime, citations); the self-contained **`/widget.js`**
-  embeddable widget; disable/republish. This is **Phase 6**.
+  embeddable widget; disable/republish (the next publish milestone).
 
 ### 3.10 Analytics — 🟡
-- A legacy analytics route/panel exists (`/api/analytics/[assistantId]`), backed by the
-  legacy Supabase project.
-- **Target (Phase 7):** DB-backed analytics scoped by `org_id`/`assistant_id` — conversation
+- A legacy analytics route/panel exists (`/api/analytics/[assistantId]`), backed by the legacy
+  publish tables — now recreated in the same consolidated Supabase project (see §5).
+- **Target:** DB-backed analytics scoped by `org_id`/`assistant_id` — conversation
   and message counts, top questions, citation rate, failed-answer rate.
 
 ### 3.11 Gemini connection (session BYOK) — ✅
@@ -370,9 +374,11 @@ Your assistants **and** their knowledge are **cloud-stored and private to your a
 
 - ❌ Multi-member organizations, roles, members, invitations, org switching (each user gets
   one personal workspace).
-- ❌ PDF/DOCX ingestion; real embeddings; server-side pgvector (vector) retrieval — knowledge
-  IS in Supabase Storage now, but retrieval is keyword/BM25, not vector.
-- ❌ Real LLM answers unless a Gemini key is connected (session BYOK) or a platform key is set.
+- ❌ PDF/DOCX ingestion (only `.txt/.md/.csv/.html`). Vector retrieval **is** built (Gemini
+  embeddings + pgvector cosine) but only activates with a Gemini key set — otherwise retrieval
+  runs the BM25 fallback.
+- 🟡 Real LLM answers require either a connected Gemini key (BYOK) **or** the FlowMind Groq demo
+  (`GROQ_DEMO_ENABLED` + key); otherwise a deterministic simulation is returned.
 - ❌ Organization-scoped / persisted Gemini credentials; BYOK for published widgets (BYOK is
   session-only, by design).
 - ❌ Authenticated server-side test-chat endpoint.
@@ -404,15 +410,20 @@ Your assistants **and** their knowledge are **cloud-stored and private to your a
 
 ## 12. Roadmap (phased plan)
 
-- **Phase 0** — Audit + plan _(done)_.
-- **Phase 1** — DB schema, RLS, Supabase clients, auth guards, type gen _(done; verify:rls 30/30)_.
-- **Phase 2** — Auth flows, org onboarding, membership management, org switcher, invitations.
-- **Phase 3** — Supabase-backed assistant CRUD; retire localStorage as source of truth.
-- **Phase 4** — Knowledge ingestion (upload → Edge Function extract/chunk/embed → pgvector).
-- **Phase 5** — Server-side retrieval + authenticated builder test-chat.
-- **Phase 6** — Publish flow, public chat endpoint, embeddable widget.
-- **Phase 7** — DB-backed analytics, error-code pass, copy cleanup, legacy migration, final
-  security sweep.
+**Done**
+- ✅ DB schema, RLS, Supabase clients, auth guards, type gen (`verify:rls` green).
+- ✅ Auth flows + per-user personal workspace (org bootstrap on first login).
+- ✅ Supabase-backed assistant CRUD; localStorage retired as source of truth.
+- ✅ Knowledge ingestion → private Storage + server parse/chunk; **Gemini embeddings** on ingest.
+- ✅ Server-side retrieval — **pgvector cosine** (`match_document_chunks`) with BM25 fallback.
+- ✅ Real LLM answers — Gemini BYOK + **FlowMind Groq demo** (atomic per-user/global quota).
+- ✅ Offline **eval harness** (RAG + workflow metrics) and **CI** (type-check · test · build).
+
+**Next**
+- Multi-member organizations — invitations, roles, member management, org switcher.
+- PDF/DOCX extraction (pdfjs-dist / mammoth), ideally in a Supabase Edge Function.
+- Versioned publish schema + public chat endpoint (rate-limited) + embeddable widget + rollback.
+- DB-backed analytics scoped by `org_id`/`assistant_id`; optional LLM-judge eval metrics.
 
 Acceptance is gated per phase; the previous phase's checks must stay green before the next
 begins.

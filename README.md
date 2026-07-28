@@ -1,12 +1,13 @@
 # FlowMind
 
+[![CI](https://github.com/VarshiniAkula/FlowMind/actions/workflows/ci.yml/badge.svg)](https://github.com/VarshiniAkula/FlowMind/actions/workflows/ci.yml)
+
 **© 2026 Varshini Akula. All rights reserved.** — Proprietary. See [LICENSE](LICENSE).
 No copying, redistribution, or derivative works without written permission.
 
 **FlowMind is a visual builder for AI chat assistants.** Describe an assistant in plain
 English or drag nodes onto a canvas to design a conversation flow, ground its answers in
-your own documents (RAG), test it in a live simulator, and publish it as a hosted chat page
-or embeddable widget.
+your own documents (RAG), test it in a live simulator, and publish it as a hosted chat page.
 
 > 📦 **The active product lives in [`flowmind/`](flowmind/).** Everything you build, run, or
 > deploy is there.
@@ -77,15 +78,67 @@ account** (isolated by Row-Level Security):
 | 1 | Database schema, RLS, Supabase clients, auth guards | ✅ Done (verify:rls green) |
 | 2 | Auth flows (login/signup/logout, route protection) | ✅ Done · organizations (multi-member, invites, roles) ⬜ Planned |
 | 3 | Supabase-backed assistant persistence (retire localStorage) | ✅ Done |
-| 4 | Cloud ingestion (upload → extract → chunk → embed → pgvector) | ⬜ Planned |
-| 5 | Server-side retrieval + authenticated test chat | ⬜ Planned |
+| 4 | Knowledge ingestion (upload → parse → chunk → **embed → pgvector**) | ✅ Done · `.pdf/.docx` extraction ⬜ Planned |
+| 5 | Server-side vector retrieval (cosine + BM25 fallback) | ✅ Done |
+| — | Real LLM answers (Gemini BYOK + FlowMind Groq demo) | ✅ Done |
+| — | Offline eval harness (RAG + workflow metrics) + CI | ✅ Done |
 | 6 | Publish flow (new schema), public chat endpoint, embeddable widget | ⬜ Planned |
-| 7 | Analytics, error-code pass, copy cleanup, final security sweep | ⬜ Planned |
+| 7 | Analytics, error-code pass, final security sweep | ⬜ Planned |
 
 Details: [docs/flowmind-spec.md](docs/flowmind-spec.md) (spec),
 [docs/flowmind-prompt-pack.md](docs/flowmind-prompt-pack.md) (phased plan).
 
 ---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Client["Browser — Next.js 15 App Router"]
+        UI["Dashboard · Canvas · Simulator · Knowledge"]
+        ENG["Runtime engine<br/>(runTurn, in-memory)"]
+    end
+
+    subgraph API["Next.js API routes (Node runtime, same-origin, RLS-guarded)"]
+        LLM["/api/llm-complete<br/>/api/llm-status"]
+        GEN["/api/generate-graph"]
+        KING["/api/knowledge/ingest"]
+        KSEARCH["/api/knowledge/search"]
+        BYOK["/api/integrations/gemini/*"]
+    end
+
+    subgraph Providers["AI providers (server-only keys)"]
+        GEMINI["Gemini<br/>chat · graph · embeddings"]
+        GROQ["Groq demo<br/>openai/gpt-oss-20b"]
+    end
+
+    subgraph Supabase["Supabase"]
+        PG[("Postgres + RLS<br/>assistants · document_chunks (pgvector)<br/>platform_llm_daily_usage")]
+        STORE[["Private Storage<br/>knowledge-files"]]
+        AUTH["Auth (@supabase/ssr)"]
+    end
+
+    UI --> ENG
+    ENG -->|LLM node| LLM
+    ENG -->|RAG node| KSEARCH
+    UI --> GEN
+    UI --> KING
+    UI --> BYOK
+
+    LLM -->|BYOK → Groq demo → sim| GROQ
+    LLM --> GEMINI
+    GEN --> GEMINI
+    KING -->|embed chunks| GEMINI
+    KING --> STORE
+    KING --> PG
+    KSEARCH -->|embed query| GEMINI
+    KSEARCH -->|cosine match / BM25| PG
+    LLM -->|atomic quota| PG
+    UI --> AUTH
+```
+
+Provider precedence for the LLM Response node: **Gemini BYOK → FlowMind Groq demo → platform
+Gemini (opt-in) → deterministic simulation**. Retrieval: **pgvector cosine → BM25 fallback**.
 
 ## Repository layout
 

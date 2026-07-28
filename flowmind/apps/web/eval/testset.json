@@ -7,17 +7,56 @@
       "k": 2,
       "corpus": [
         { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-carryon", "text": "Carry-on rules: one personal item plus one cabin bag no larger than 55x40x20 cm." },
         { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
-        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
+        { "id": "c-cancel", "text": "Cancellation policy: cancel your flight up to 24 hours before departure for a full refund." },
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." },
+        { "id": "c-checkin", "text": "Online check-in opens 48 hours before your flight and closes 1 hour before departure." }
       ]
     },
     {
       "name": "refund timing query",
-      "query": "when will I get my money back after a refund",
+      "query": "when will I get my refund money back",
       "relevantIds": ["c-refund"],
       "k": 2,
       "corpus": [
         { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
+        { "id": "c-cancel", "text": "Cancellation policy: cancel your flight up to 24 hours before departure for a full refund." },
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
+      ]
+    },
+    {
+      "name": "cancellation policy query",
+      "query": "can I cancel my flight and get a refund",
+      "relevantIds": ["c-cancel"],
+      "k": 2,
+      "corpus": [
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
+        { "id": "c-cancel", "text": "Cancellation policy: cancel your flight up to 24 hours before departure for a full refund." },
+        { "id": "c-checkin", "text": "Online check-in opens 48 hours before your flight and closes 1 hour before departure." }
+      ]
+    },
+    {
+      "name": "check-in timing query",
+      "query": "when does online check-in open before my flight",
+      "relevantIds": ["c-checkin"],
+      "k": 2,
+      "corpus": [
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." },
+        { "id": "c-checkin", "text": "Online check-in opens 48 hours before your flight and closes 1 hour before departure." },
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." }
+      ]
+    },
+    {
+      "name": "multi-relevant baggage + carry-on",
+      "query": "baggage and carry-on rules for cabin bags",
+      "relevantIds": ["c-baggage", "c-carryon"],
+      "k": 2,
+      "corpus": [
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-carryon", "text": "Carry-on rules: one personal item plus one cabin bag no larger than 55x40x20 cm." },
         { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
         { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
       ]
@@ -54,6 +93,45 @@
           { "id": "e3", "source": "details", "target": "lookup" },
           { "id": "e4", "source": "lookup", "target": "answer" },
           { "id": "e5", "source": "answer", "target": "reply" }
+        ]
+      }
+    },
+    {
+      "name": "recovers after an invalid choice",
+      "turns": ["huh what", "Baggage", "My checked bag is overweight"],
+      "expect": { "completes": true, "variables": { "topic": "baggage" } },
+      "graph": {
+        "variables": [
+          { "name": "topic", "type": "string", "scope": "session" },
+          { "name": "issue", "type": "string", "scope": "session" }
+        ],
+        "nodes": [
+          { "id": "greet", "type": "message", "label": "Greet", "position": { "x": 0, "y": 0 }, "data": { "text": "Hello!" } },
+          { "id": "topic", "type": "choice", "label": "Topic", "position": { "x": 0, "y": 100 }, "data": { "prompt": "Pick a topic.", "variableName": "topic", "options": [ { "id": "o1", "label": "Billing", "value": "billing" }, { "id": "o2", "label": "Baggage", "value": "baggage" } ] } },
+          { "id": "details", "type": "input", "label": "Details", "position": { "x": 0, "y": 200 }, "data": { "prompt": "Describe the issue.", "variableName": "issue" } },
+          { "id": "reply", "type": "message", "label": "Reply", "position": { "x": 0, "y": 300 }, "data": { "text": "Thanks, noted: {{issue}}" } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "greet", "target": "topic" },
+          { "id": "e2", "source": "topic", "target": "details" },
+          { "id": "e3", "source": "details", "target": "reply" }
+        ]
+      }
+    },
+    {
+      "name": "incomplete — awaits input, no turns supplied",
+      "turns": [],
+      "expect": { "completes": false },
+      "graph": {
+        "variables": [{ "name": "email", "type": "string", "scope": "session" }],
+        "nodes": [
+          { "id": "greet", "type": "message", "label": "Greet", "position": { "x": 0, "y": 0 }, "data": { "text": "Welcome!" } },
+          { "id": "ask", "type": "input", "label": "Ask", "position": { "x": 0, "y": 100 }, "data": { "prompt": "What's your email?", "variableName": "email" } },
+          { "id": "done", "type": "message", "label": "Done", "position": { "x": 0, "y": 200 }, "data": { "text": "Got it." } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "greet", "target": "ask" },
+          { "id": "e2", "source": "ask", "target": "done" }
         ]
       }
     },

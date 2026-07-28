@@ -206,12 +206,16 @@ export const handleLlmResponse: NodeHandler = async (ctx) => {
   );
 
   let answer = '';
+  let info: Record<string, unknown> | undefined;
   try {
-    answer = await ctx.services.llm.complete({
+    const result = await ctx.services.llm.complete({
       systemPrompt,
       userPrompt,
       temperature: data.temperature ?? 0.7,
     });
+    answer = result.text;
+    // Sanitized provider metadata for the trace (no keys, prompts, reasoning).
+    if (result.info) info = result.info as Record<string, unknown>;
   } catch (err) {
     answer = `(LLM error: ${String(err)})`;
   }
@@ -224,7 +228,16 @@ export const handleLlmResponse: NodeHandler = async (ctx) => {
     messages: [],
     waitForUser: false,
     traceData: {
-      model: data.model,
+      // Prefer the actual provider/model reported by the service; fall back to
+      // the node's configured model for the deterministic/offline path.
+      provider: info?.provider ?? 'unknown',
+      providerMode: info?.providerMode,
+      model: info?.model ?? data.model,
+      durationMs: info?.durationMs,
+      inputTokens: info?.inputTokens,
+      outputTokens: info?.outputTokens,
+      demoRequestsRemaining: info?.demoRequestsRemaining,
+      fallbackReason: info?.fallbackReason,
       systemPromptPreview: systemPrompt.slice(0, 200),
       userPromptPreview: userPrompt.slice(0, 200),
       answerPreview: answer.slice(0, 200),

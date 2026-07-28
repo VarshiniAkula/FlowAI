@@ -33,7 +33,7 @@ the whole point of this document:
 | Tenancy | **Per-user isolation** (one personal org each) | Multi-tenant orgs + roles |
 | Knowledge | **Supabase Storage + server-parsed chunks** (`.txt/.md/.csv/.html`) | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
 | Retrieval | In-browser keyword/vector search | Server-side pgvector (HNSW, cosine) |
-| LLM | Session **BYOK** or platform key → Gemini; else a deterministic demo **stub** | Gemini `gemini-2.5-flash` + `text-embedding-004` |
+| LLM | LLM Response node: **Gemini BYOK** → **FlowMind Groq demo** (limited, atomically capped) → platform Gemini (opt-in) → deterministic simulation | Gemini `gemini-2.0-flash` · Groq `openai/gpt-oss-20b` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
 Today's app has **real accounts and per-user assistant history** backed by Supabase + RLS
@@ -145,11 +145,13 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
   (option matching + variable capture), input (variable capture), condition, and template
   interpolation (`{{var}}`) all execute for real. Verified end-to-end on a flight-booking
   flow.
-- **Caveat:** `llm_response` nodes call `POST /api/llm-complete`, which returns a **canned
-  deterministic demo response** when no Gemini key is connected (so the UI/streaming path still
-  works). With a key connected (session BYOK or platform) it streams from Gemini. RAG nodes
-  pull from the in-browser store. Provider/mode/model metadata rides on the response; no key
-  material appears in responses or traces.
+- **Caveat:** `llm_response` nodes call `POST /api/llm-complete`, which resolves a provider in
+  precedence order — **Gemini BYOK → FlowMind Groq demo → (platform Gemini, only if
+  `ALLOW_PLATFORM_GEMINI_LLM_FALLBACK=true`) → deterministic simulation** — and streams (SSE) or
+  returns JSON. When no real provider is available (or the Groq allowance is reached / oversized
+  prompt / provider outage before the first token) it returns a clearly-labeled deterministic
+  simulation. The execution trace shows the provider, mode, model, token counts, and remaining
+  demo allowance. No key material or provider reasoning ever appears in responses or traces.
 - **Target (Phase 5):** an authenticated `POST /api/assistants/[id]/test-chat` endpoint
   doing server-side retrieval + Gemini, using the live assistant graph/settings.
 
@@ -185,6 +187,33 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - **Out of scope (by design):** organization-scoped/permanent credentials, database-backed
   secret storage, published-widget owner credentials, and multi-provider support. It is a
   session BYOK feature — not an enterprise secret-management system.
+
+### 3.12 FlowMind Groq demo (LLM Response node) — 🟡 optional
+- A **limited, server-funded** fallback so a signed-in user **without** their own Gemini key
+  still gets real AI on the LLM Response node. Off by default; enabled with `GROQ_DEMO_ENABLED=true`
+  + a server-only `GROQ_API_KEY`. Model: **`openai/gpt-oss-20b`** (configurable).
+- **Scope:** the `llm_response` node only. It does **not** power story-to-graph generation,
+  embeddings, RAG, public hosted chats, or embeddable widgets — those keep their existing
+  behavior. Only **authenticated** users can consume it.
+- **Quota (atomic, in Postgres):** a per-user and a global **daily UTC** cap enforced by
+  `reserve_platform_llm_request()` (transaction advisory lock; no in-memory counters), backed by
+  the `platform_llm_daily_usage` table (deny-all RLS; service-role only). A request is reserved
+  *before* the provider call and counts even if the provider then fails. Usage records store
+  **metadata only** (provider, model, token counts, duration, success/failure) — never prompt
+  content. Defaults: 5/user/day, 100/deployment/day, 6000-char prompt cap, 300 output tokens,
+  30s timeout — all configurable.
+- **Behavior:** Groq reasoning is requested with `reasoning_effort: 'low'` and is never exposed.
+  A failure **before** the first token falls back transparently to simulation with a sanitized
+  reason (`GROQ_USER_LIMIT_REACHED`, `GROQ_GLOBAL_LIMIT_REACHED`, `GROQ_RATE_LIMITED`,
+  `GROQ_TIMEOUT`, `GROQ_PROMPT_TOO_LARGE`, …); a failure **after** streaming has begun emits an
+  SSE `error` and closes (no mixed answer). A connected **Gemini BYOK** error is surfaced
+  sanitized and does **not** silently switch to Groq.
+- **Status:** `GET /api/llm-status` reports the selected provider + remaining demo allowance
+  (`Cache-Control: no-store`, no key material). The simulator labels it **"FlowMind Demo AI"**
+  with the remaining count, a privacy notice (the prompt is sent to Groq), and a **Connect
+  Gemini** call-to-action. Never described as unlimited, permanently free, or production-grade.
+- **Privacy:** demo requests send the LLM node prompt to Groq; the UI warns not to enter
+  confidential, regulated, or personal information in the public prototype.
 
 ---
 
@@ -287,6 +316,12 @@ Required vars (`flowmind/apps/web/.env.example`):
   is present)
 - `GEMINI_BYOK_TTL_MINUTES` (optional, default 240), `GEMINI_GENERATION_MODEL` /
   `GEMINI_GRAPH_MODEL` (optional; default `gemini-2.0-flash`)
+- `GROQ_DEMO_ENABLED` + `GROQ_API_KEY` (server-only) enable the FlowMind Groq demo for the LLM
+  Response node; `GROQ_LLM_MODEL` (default `openai/gpt-oss-20b`), `GROQ_DEMO_USER_DAILY_LIMIT`
+  (5), `GROQ_DEMO_GLOBAL_DAILY_LIMIT` (100), `GROQ_DEMO_MAX_PROMPT_CHARS` (6000),
+  `GROQ_DEMO_MAX_OUTPUT_TOKENS` (300), `GROQ_REQUEST_TIMEOUT_MS` (30000) tune it
+- `ALLOW_PLATFORM_GEMINI_LLM_FALLBACK` (default `false`) — only when exactly `true` may the LLM
+  Response node use the platform `GEMINI_API_KEY`
 - `NEXT_PUBLIC_APP_URL`
 
 None of the server secrets use the `NEXT_PUBLIC_` prefix. Scripts: `pnpm dev`, `pnpm build`,

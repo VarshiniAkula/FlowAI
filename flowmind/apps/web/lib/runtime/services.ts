@@ -1,4 +1,9 @@
-import type { RetrievedChunk, RuntimeServices } from '@flowmind/shared';
+import type {
+  LlmCompleteResult,
+  LlmCompletionInfo,
+  RetrievedChunk,
+  RuntimeServices,
+} from '@flowmind/shared';
 import { dbSearchChunks } from '@/lib/db/knowledge';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
@@ -27,7 +32,7 @@ export function createSimulatorServices(assistantId: string): RuntimeServices {
       },
     },
     llm: {
-      async complete({ systemPrompt, userPrompt, temperature, onChunk }) {
+      async complete({ systemPrompt, userPrompt, temperature, onChunk }): Promise<LlmCompleteResult> {
         // Non-streaming path: single round-trip JSON.
         if (!onChunk) {
           const res = await fetch('/api/llm-complete', {
@@ -37,10 +42,10 @@ export function createSimulatorServices(assistantId: string): RuntimeServices {
           });
           if (!res.ok) {
             const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || `LLM HTTP ${res.status}`);
+            throw new Error(body.error?.message || body.error || `LLM HTTP ${res.status}`);
           }
           const json = await res.json();
-          return String(json.text ?? '');
+          return { text: String(json.text ?? ''), info: extractInfo(json) };
         }
 
         // Streaming path: parse SSE frames and forward each delta to onChunk.
@@ -51,7 +56,7 @@ export function createSimulatorServices(assistantId: string): RuntimeServices {
         });
         if (!res.ok || !res.body) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `LLM HTTP ${res.status}`);
+          throw new Error(body.error?.message || body.error || `LLM HTTP ${res.status}`);
         }
         return await consumeSse(res.body, onChunk);
       },
@@ -75,7 +80,7 @@ export function createSimulatorServices(assistantId: string): RuntimeServices {
 async function consumeSse(
   body: ReadableStream<Uint8Array>,
   onChunk: (delta: string) => void,
-): Promise<string> {
+): Promise<LlmCompleteResult> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -112,7 +117,10 @@ async function consumeSse(
           acc += parsed.delta;
           onChunk(parsed.delta);
         } else if (event === 'done') {
-          return typeof parsed.text === 'string' ? parsed.text : acc;
+          return {
+            text: typeof parsed.text === 'string' ? parsed.text : acc,
+            info: extractInfo(parsed),
+          };
         } else if (event === 'error') {
           throw new Error(parsed.error || 'LLM stream error');
         }
@@ -122,5 +130,22 @@ async function consumeSse(
     reader.releaseLock();
   }
 
-  return acc;
+  return { text: acc };
+}
+
+/** Pull sanitized provider metadata off a JSON body or `done` frame. */
+function extractInfo(o: Record<string, unknown>): LlmCompletionInfo | undefined {
+  if (!o || typeof o !== 'object') return undefined;
+  const info: LlmCompletionInfo = {};
+  if (typeof o.provider === 'string') info.provider = o.provider as LlmCompletionInfo['provider'];
+  if (typeof o.providerMode === 'string')
+    info.providerMode = o.providerMode as LlmCompletionInfo['providerMode'];
+  if (typeof o.model === 'string') info.model = o.model;
+  if (typeof o.durationMs === 'number') info.durationMs = o.durationMs;
+  if (typeof o.inputTokens === 'number') info.inputTokens = o.inputTokens;
+  if (typeof o.outputTokens === 'number') info.outputTokens = o.outputTokens;
+  if (typeof o.demoRequestsRemaining === 'number')
+    info.demoRequestsRemaining = o.demoRequestsRemaining;
+  if (typeof o.fallbackReason === 'string') info.fallbackReason = o.fallbackReason;
+  return Object.keys(info).length > 0 ? info : undefined;
 }

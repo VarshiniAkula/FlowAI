@@ -2,7 +2,6 @@ import { generateGraphJson } from '@/lib/gemini/client';
 import { resolveGeminiCredential } from '@/lib/gemini/credentials';
 import { GeminiError } from '@/lib/gemini/errors';
 import { LIMITS } from '@/lib/gemini/limits';
-import { getFallbackProvider, fallbackGenerateText } from '@/lib/llm/fallback';
 import { assertSameOrigin, errorResponse, jsonNoStore } from '@/lib/gemini/request';
 import {
   STORY_TO_GRAPH_PROMPT,
@@ -47,22 +46,10 @@ export async function POST(req: Request) {
 
     const cred = await resolveGeminiCredential();
 
-    // No Gemini key: try a configured fallback provider (Grok/Llama), else the
-    // deterministic heuristic.
+    // No Gemini key: deterministic heuristic generator. Story generation
+    // intentionally does NOT use the Groq demo provider — Groq is scoped to the
+    // LLM Response node only.
     if (cred.mode === 'fallback') {
-      const provider = getFallbackProvider();
-      if (provider) {
-        const { text, model } = await fallbackGenerateText({
-          provider,
-          userPrompt: STORY_TO_GRAPH_PROMPT + story,
-          json: true,
-        });
-        try {
-          return jsonNoStore({ graph: parseGraphJson(text), source: 'gemini', providerMode: 'fallback-provider', model });
-        } catch {
-          return jsonNoStore({ graph: generateHeuristicGraph(story), source: 'heuristic', providerMode: 'fallback-provider', model, repaired: true });
-        }
-      }
       return jsonNoStore({
         graph: generateHeuristicGraph(story),
         source: 'heuristic',

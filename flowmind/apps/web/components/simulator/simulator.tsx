@@ -13,7 +13,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { GeminiConnectionButton } from '@/components/integrations/gemini-connection-button';
-import { useGeminiConnection } from '@/hooks/use-gemini-connection';
+import { LlmStatusBanner, LlmPrivacyNotice } from '@/components/integrations/llm-status-banner';
+import { useLlmStatus } from '@/hooks/use-llm-status';
 import { useAssistantStore } from '@/stores/assistant-store';
 import { useGraphStore } from '@/stores/graph-store';
 import {
@@ -39,7 +40,7 @@ export function Simulator({ assistantId }: Props) {
   const assistant = useAssistantStore((s) => s.getAssistant(assistantId));
   const { nodes, edges } = useGraphStore();
   const setActiveNode = useGraphStore((s) => s.setActiveNode);
-  const gemini = useGeminiConnection();
+  const llm = useLlmStatus();
 
   // Snapshot the canvas graph into a stable structure for runTurn.
   const graph: Graph = useMemo(
@@ -126,6 +127,9 @@ export function Simulator({ assistantId }: Props) {
       })),
     ]);
     setDone(result.done);
+    // A completed turn may have consumed a Groq demo request — refresh the
+    // remaining allowance shown in the banner.
+    void llm.refresh();
   };
 
   const reset = () => {
@@ -170,12 +174,8 @@ export function Simulator({ assistantId }: Props) {
           </div>
         </div>
 
-        {gemini.status?.mode === 'fallback' && (
-          <div className="shrink-0 border-b border-amber-400/50 bg-amber-100 px-5 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/50 dark:text-amber-100">
-            <span className="font-bold">Demo mode.</span> LLM responses are simulated. Connect a
-            key for real AI responses.
-          </div>
-        )}
+        <LlmStatusBanner status={llm.status} />
+        <LlmPrivacyNotice status={llm.status} />
 
         <div ref={scrollerRef} className="flex-1 overflow-y-auto px-5 py-4">
           {messages.length === 0 && !running && (

@@ -25,8 +25,9 @@ Security. Several subsystems are still stubbed or unbuilt (see below). Expect br
 | Per-user history (your assistants, isolated by RLS) | ✅ Live — each account sees only its own, persisted in Supabase |
 | Visual builder (Story → Canvas → Test) | ✅ Working |
 | Knowledge upload + retrieval | ✅ Files in **Supabase Storage**, parsed + chunked server-side, per-user retrieval (`.txt / .md / .csv / .html`) |
-| LLM answers | 🟡 Real via **session Gemini BYOK** (or a platform key); deterministic demo stub otherwise |
+| LLM answers | 🟡 **Gemini BYOK** → **FlowMind Groq demo** (limited shared allowance) → deterministic simulation, in that order |
 | Gemini BYOK (bring your own key) | ✅ Connect a key per browser session — validated server-side, encrypted in an HttpOnly cookie, auto-expiring |
+| FlowMind Demo AI (shared Groq allowance) | 🟡 Optional. Signed-in users without a Gemini key get a small daily quota of real Groq (`openai/gpt-oss-20b`) responses on the LLM Response node, atomically capped per-user and globally |
 | Organizations (multi-member, invites, roles, switching) | ❌ Not built — each user gets one personal workspace |
 | Cloud ingestion (PDF/DOCX, embeddings, pgvector) | ❌ Not built yet |
 | Publish + public chat + embeddable widget | 🟡 Legacy publish/hosted-chat works; new versioned schema + widget not built |
@@ -52,11 +53,18 @@ account** (isolated by Row-Level Security):
   Storage**, parsed + chunked **on the server** into `document_chunks`, and retrieved per-user
   via RLS (with a built-in retrieval tester). PDF/DOCX and vector embeddings are next.
 - **Test simulator** — run the whole flow with a live execution trace and variable capture.
-  LLM nodes return a deterministic demo response until a Gemini key is connected.
+  The LLM Response node has three modes: a connected **Gemini BYOK** key (highest priority),
+  a limited shared **FlowMind Groq demo** allowance for signed-in users without a key, and a
+  clearly-labeled **deterministic simulation** when neither is available. The trace shows which
+  provider/model actually answered and the remaining demo allowance.
+- **FlowMind Demo AI (Groq)** — optional, off by default. When configured (`GROQ_DEMO_ENABLED`
+  + `GROQ_API_KEY`), authenticated users without a Gemini key get a small daily quota of real
+  Groq `openai/gpt-oss-20b` responses. The allowance is enforced atomically in Postgres
+  (per-user and global daily caps); provider reasoning is never exposed. This is a limited demo,
+  not unlimited or guaranteed inference — connect Gemini for full access.
 - **Gemini BYOK** — click **Connect Gemini** (dashboard / editor) to add your own key for the
   session. It's validated server-side, encrypted in an HttpOnly cookie, auto-expires, and is
-  never stored in the browser or database. Without a key, FlowMind stays fully usable in demo
-  mode.
+  never stored in the browser or database. Without a key, FlowMind stays fully usable.
 
 ## 🗺️ Roadmap
 
@@ -112,7 +120,8 @@ pnpm --filter @flowmind/web dev
 # open http://localhost:3000
 ```
 You can build assistants, generate flows, upload text knowledge, and run the simulator
-immediately. Data lives in your browser; LLM answers are stubbed until you add a Gemini key.
+immediately. Until you connect Gemini (or enable the Groq demo), LLM Response nodes return a
+clearly-labeled deterministic simulation.
 
 ### 2. (Optional) Enable real LLM output + the backend
 ```bash
@@ -123,9 +132,12 @@ Fill in `flowmind/apps/web/.env.local`:
 | Variable | Needed for | Notes |
 |---|---|---|
 | `BYOK_ENCRYPTION_KEY` | Gemini BYOK | **Server-only.** 32 bytes base64 — generate with `openssl rand -base64 32`. Required to connect a key. |
-| `GEMINI_API_KEY` | Optional platform key | Server-only. Used only when no session BYOK key is present. |
+| `GEMINI_API_KEY` | Optional platform key | Server-only. Powers story-to-graph generation without BYOK. Used for the LLM Response node only when `ALLOW_PLATFORM_GEMINI_LLM_FALLBACK=true`. |
 | `GEMINI_BYOK_TTL_MINUTES` | BYOK session length | Optional, default `240` (4h). |
 | `GEMINI_GENERATION_MODEL` / `GEMINI_GRAPH_MODEL` | Model selection | Optional; default `gemini-2.0-flash`. Setting one applies to both. |
+| `GROQ_DEMO_ENABLED` + `GROQ_API_KEY` | FlowMind Groq demo (LLM node) | Server-only. Set the flag to `true` **and** provide a Groq key to give signed-in users a small daily allowance of real `openai/gpt-oss-20b` responses. Off by default. |
+| `GROQ_LLM_MODEL` / `GROQ_DEMO_USER_DAILY_LIMIT` / `GROQ_DEMO_GLOBAL_DAILY_LIMIT` / `GROQ_DEMO_MAX_PROMPT_CHARS` / `GROQ_DEMO_MAX_OUTPUT_TOKENS` / `GROQ_REQUEST_TIMEOUT_MS` | Groq demo tuning | Optional; safe documented defaults (`openai/gpt-oss-20b`, `5`, `100`, `6000`, `300`, `30000`). |
+| `ALLOW_PLATFORM_GEMINI_LLM_FALLBACK` | Platform-Gemini LLM fallback | Optional, default `false`. When not exactly `true`, the LLM Response node never uses `GEMINI_API_KEY`. |
 | `NEXT_PUBLIC_SUPABASE_URL` | Backend foundation | From your Supabase project |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Backend foundation | Publishable/anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend foundation | **Server-only; bypasses RLS; never commit** |

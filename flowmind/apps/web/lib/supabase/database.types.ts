@@ -253,6 +253,63 @@ export type Database = {
           },
         ]
       }
+      flowmind_conversations: {
+        Row: {
+          assistant_id: string | null
+          id: string
+          publish_id: string | null
+          started_at: string
+          status: string
+          turn_count: number
+        }
+        Insert: {
+          assistant_id?: string | null
+          id: string
+          publish_id?: string | null
+          started_at?: string
+          status?: string
+          turn_count?: number
+        }
+        Update: {
+          assistant_id?: string | null
+          id?: string
+          publish_id?: string | null
+          started_at?: string
+          status?: string
+          turn_count?: number
+        }
+        Relationships: []
+      }
+      flowmind_published_assistants: {
+        Row: {
+          assistant_id: string | null
+          description: string | null
+          graph: Json | null
+          id: string
+          name: string | null
+          published_at: string
+          version: number
+        }
+        Insert: {
+          assistant_id?: string | null
+          description?: string | null
+          graph?: Json | null
+          id: string
+          name?: string | null
+          published_at?: string
+          version?: number
+        }
+        Update: {
+          assistant_id?: string | null
+          description?: string | null
+          graph?: Json | null
+          id?: string
+          name?: string | null
+          published_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       invitations: {
         Row: {
           accepted_at: string | null
@@ -464,6 +521,39 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_llm_daily_usage: {
+        Row: {
+          failed_requests: number
+          input_tokens: number
+          output_tokens: number
+          provider: string
+          request_count: number
+          updated_at: string
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          failed_requests?: number
+          input_tokens?: number
+          output_tokens?: number
+          provider: string
+          request_count?: number
+          updated_at?: string
+          usage_date: string
+          user_id: string
+        }
+        Update: {
+          failed_requests?: number
+          input_tokens?: number
+          output_tokens?: number
+          provider?: string
+          request_count?: number
+          updated_at?: string
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -602,8 +692,39 @@ export type Database = {
         Args: { p_name: string; p_slug: string }
         Returns: string
       }
+      get_platform_llm_usage: {
+        Args: { p_provider: string; p_user_id: string }
+        Returns: {
+          request_count: number
+          reset_at: string
+        }[]
+      }
       is_org_member: { Args: { org: string }; Returns: boolean }
       org_role: { Args: { org: string }; Returns: string }
+      record_platform_llm_result: {
+        Args: {
+          p_failed: boolean
+          p_input_tokens: number
+          p_output_tokens: number
+          p_provider: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      reserve_platform_llm_request: {
+        Args: {
+          p_global_daily_limit: number
+          p_provider: string
+          p_user_daily_limit: number
+          p_user_id: string
+        }
+        Returns: {
+          allowed: boolean
+          reason: string
+          remaining: number
+          reset_at: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

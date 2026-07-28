@@ -74,18 +74,29 @@ export function EditorShell({
     }
   }, [assistant, hydrated, setGraph]);
 
-  // Auto-save on graph changes (debounced)
+  // Auto-save on graph changes (debounced).
+  //
+  // IMPORTANT: depend only on the graph data + hydration, NOT on the `assistant`
+  // object. saveGraph replaces the assistant in the store with a new identity
+  // ({ ...a, graph, updatedAt }), so listing `assistant` here made this effect
+  // re-fire after every save — an infinite 500ms save loop that hammered
+  // Supabase for as long as the editor stayed open. Read the assistant
+  // imperatively at save time instead.
   useEffect(() => {
-    if (!hydrated || !assistant) return;
+    if (!hydrated) return;
     const t = setTimeout(() => {
+      const current = useAssistantStore.getState().getAssistant(assistantId);
+      if (!current) return;
       saveGraph(assistantId, {
         nodes: nodes as any,
         edges: edges as any,
-        variables: assistant.graph.variables,
+        variables: current.graph.variables,
       });
     }, 500);
     return () => clearTimeout(t);
-  }, [nodes, edges, hydrated, assistant, assistantId, saveGraph]);
+    // saveGraph is a stable Zustand action; `assistant` is intentionally excluded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, hydrated, assistantId]);
 
   const currentTab = TABS.find((t) => pathname.endsWith(`/${t.id}`))?.id || 'canvas';
 

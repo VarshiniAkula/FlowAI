@@ -84,8 +84,10 @@ export async function groqGenerate(
         temperature: clampTemperature(args.temperature),
         max_completion_tokens: cfg.maxOutputTokens,
         reasoning_effort: 'low',
+        // 'hidden' suppresses reasoning tokens from the response. Do NOT also
+        // send `include_reasoning` — the Groq API rejects the pair as mutually
+        // exclusive (400). We still ignore any `reasoning` field defensively.
         reasoning_format: 'hidden',
-        include_reasoning: false,
       },
       { signal: timeout.signal, timeout: cfg.requestTimeoutMs },
     );
@@ -129,8 +131,8 @@ export async function groqStream(args: GroqArgs): Promise<StreamingCompletion> {
         temperature: clampTemperature(args.temperature),
         max_completion_tokens: cfg.maxOutputTokens,
         reasoning_effort: 'low',
+        // See groqGenerate: 'hidden' alone; pairing with include_reasoning 400s.
         reasoning_format: 'hidden',
-        include_reasoning: false,
       },
       { signal: timeout.signal, timeout: cfg.requestTimeoutMs },
     );

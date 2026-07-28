@@ -53,8 +53,9 @@ describe('groqGenerate (non-streaming)', () => {
     const body = createMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.model).toBe('openai/gpt-oss-20b');
     expect(body.reasoning_effort).toBe('low');
-    expect(body.include_reasoning).toBe(false);
     expect(body.reasoning_format).toBe('hidden');
+    // Must NOT also send include_reasoning — Groq rejects the pair (400).
+    expect(body.include_reasoning).toBeUndefined();
     expect(body.max_completion_tokens).toBe(300);
     // temperature clamped into the safe range
     expect(body.temperature).toBeLessThanOrEqual(1.5);
@@ -136,7 +137,8 @@ describe('groqStream (streaming)', () => {
 
     const body = createMock.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.stream).toBe(true);
-    expect(body.include_reasoning).toBe(false);
+    expect(body.reasoning_format).toBe('hidden');
+    expect(body.include_reasoning).toBeUndefined();
   });
 
   it('maps a create() failure before streaming to a GroqError', async () => {

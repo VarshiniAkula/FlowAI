@@ -32,7 +32,7 @@ the whole point of this document:
 | Auth | **Email/password login (`@supabase/ssr`)** | Supabase Auth + org membership |
 | Tenancy | **Per-user isolation** (one personal org each) | Multi-tenant orgs + roles |
 | Knowledge | **Supabase Storage + server-parsed chunks** (`.txt/.md/.csv/.html`) | Private Storage + Edge-Function ingestion, `.pdf/.docx` too |
-| Retrieval | **Supabase-scoped BM25-lite** (RLS-filtered, lexical) | Server-side pgvector (HNSW, cosine) |
+| Retrieval | **Server-side pgvector** (gemini-embedding-001, HNSW cosine) with BM25-lite fallback | + reranking, hybrid search |
 | LLM | LLM Response node: **Gemini BYOK** → **FlowMind Groq demo** (limited, atomically capped) → platform Gemini (opt-in) → deterministic simulation | Gemini `gemini-2.0-flash` · Groq `openai/gpt-oss-20b` |
 | Publish | Legacy table via anon key | New schema, unguessable public IDs, service-role runtime |
 
@@ -129,17 +129,19 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - **Target (Phase 4+):** heavy extraction (pdfjs-dist, mammoth) + Gemini `text-embedding-004`
   (768-dim) in a **Supabase Edge Function**, then pgvector (HNSW, cosine) retrieval.
 
-### 3.7 Retrieval / RAG — 🟡
-- **Works:** `dbSearchChunks(assistantId, query, topK)` fetches the assistant's chunks from
-  **Supabase** (RLS-scoped to the user's org) and ranks them with a **BM25-lite** scorer
-  (`lib/knowledge/score.ts`), returning ranked hits with scores. Verified live: a baggage-fee
-  query correctly surfaced the "BAGGAGE ALLOWANCE" chunk on top. The simulator's RAG node uses
-  this same path.
-- **Prototype-grade:** ranking is lexical (BM25-lite), not semantic — the `embedding vector(768)`
-  column exists but is unpopulated, so there is no vector similarity yet.
-- **Target:** populate embeddings on ingest and switch retrieval to a Postgres
-  `match_document_chunks` function doing cosine similarity over the HNSW index, filtered by
-  `org_id`/`assistant_id` at the SQL layer, with the query embedded server-side.
+### 3.7 Retrieval / RAG — ✅ (vector) / 🟡 (needs a Gemini key)
+- **Works:** `POST /api/knowledge/search` embeds the query server-side (Gemini
+  `gemini-embedding-001`, `RETRIEVAL_QUERY`, 768-dim) and cosine-matches stored chunk vectors
+  via the `match_document_chunks` Postgres function over the HNSW index, filtered by
+  `assistant_id`. Chunks are embedded on ingest (`RETRIEVAL_DOCUMENT`). Both the simulator's RAG
+  node and the Knowledge tab's retrieval tester use this route; the tester shows whether a result
+  was ranked by **vector similarity** or **keyword (BM25)**.
+- **Graceful fallback:** when no Gemini key is available (BYOK or platform), or a chunk has no
+  embedding yet, retrieval falls back to the **BM25-lite** lexical scorer — never a hard failure.
+- **Backfill:** `pnpm --filter @flowmind/web backfill:embeddings` embeds any pre-existing chunks
+  that were ingested before embeddings were enabled.
+- **Note:** vector search activates only with a Gemini key set (embeddings need one). Groq does
+  not provide embeddings; a Gemini key can be used for embeddings even while Groq serves chat.
 
 ### 3.8 Test simulator — ✅ with caveat
 - **Works:** the "Test" tab runs the whole graph **client-side** with a real execution
@@ -297,9 +299,9 @@ previous live demo lived in that old project, so those `/chat/…` links reset a
 - **Canvas:** React Flow (`@xyflow/react`) v12.
 - **State:** Zustand (assistants + knowledge are Supabase-backed and RLS-isolated; files in Supabase Storage).
 - **Validation:** Zod (shared validators in `packages/shared`).
-- **AI:** Google Gemini via **`@google/genai`** — default `gemini-2.0-flash` (configurable);
-  Groq via **`groq-sdk`** — `openai/gpt-oss-20b` for the LLM Response node demo. Embeddings
-  (`text-embedding-004`) are planned, not yet wired.
+- **AI:** Google Gemini via **`@google/genai`** — default `gemini-2.0-flash` (configurable) for
+  chat/graph and **`gemini-embedding-001`** (768-dim) for retrieval embeddings; Groq via
+  **`groq-sdk`** — `openai/gpt-oss-20b` for the LLM Response node demo.
 - **Backend (foundation):** Supabase (`supabase-js` + `@supabase/ssr`), Postgres + pgvector
   (HNSW), private Storage; ingestion targets a Deno Edge Function.
 - **Monorepo:** pnpm workspaces + Turbo; `@flowmind/shared` package for types/constants/validators.

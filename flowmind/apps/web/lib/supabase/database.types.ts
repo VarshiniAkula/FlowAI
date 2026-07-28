@@ -700,6 +700,21 @@ export type Database = {
         }[]
       }
       is_org_member: { Args: { org: string }; Returns: boolean }
+      match_document_chunks: {
+        Args: {
+          p_assistant_id: string
+          p_match_count: number
+          p_query_embedding: string
+        }
+        Returns: {
+          id: string
+          document_id: string
+          document_name: string
+          content: string
+          chunk_index: number
+          similarity: number
+        }[]
+      }
       org_role: { Args: { org: string }; Returns: string }
       record_platform_llm_result: {
         Args: {

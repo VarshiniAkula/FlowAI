@@ -1,5 +1,4 @@
 import type { BrowserSupabaseClient } from '@/lib/supabase/browser';
-import { scoreTexts } from '@/lib/knowledge/score';
 
 type Client = BrowserSupabaseClient;
 
@@ -48,42 +47,6 @@ export async function dbListDocuments(
   }));
 }
 
-/**
- * Retrieve the most relevant chunks for a query from Supabase. Chunks are
- * fetched (RLS-scoped) then ranked with the BM25-lite scorer. (Vector search
- * over stored embeddings is a later enhancement.)
- */
-export async function dbSearchChunks(
-  supabase: Client,
-  assistantId: string,
-  query: string,
-  topK = 4,
-): Promise<RetrievedChunk[]> {
-  const { data, error } = await supabase
-    .from('document_chunks')
-    .select('content, chunk_index, document_id, documents(name)')
-    .eq('assistant_id', assistantId)
-    .limit(2000);
-  if (error) throw error;
-
-  const rows = data ?? [];
-  if (rows.length === 0) return [];
-
-  const ranked = scoreTexts(
-    query,
-    rows.map((r) => r.content),
-    topK,
-  );
-
-  return ranked.map(({ index, score }) => {
-    const r = rows[index]!;
-    const doc = r.documents as unknown as { name: string } | null;
-    return {
-      content: r.content,
-      documentId: r.document_id,
-      documentName: doc?.name ?? 'document',
-      chunkIndex: r.chunk_index,
-      score,
-    };
-  });
-}
+// Retrieval now runs server-side via POST /api/knowledge/search (vector search
+// with a BM25 fallback), so the query embedding + Gemini key stay on the
+// server. The `RetrievedChunk` shape above matches that route's `hits`.

@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   dbListDocuments,
-  dbSearchChunks,
   type KnowledgeDoc,
   type RetrievedChunk,
 } from '@/lib/db/knowledge';
@@ -40,6 +39,7 @@ export function KnowledgeManager({ assistantId }: Props) {
   const [hits, setHits] = useState<RetrievedChunk[]>([]);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [searchMethod, setSearchMethod] = useState<string | null>(null);
 
   const loadDocs = useCallback(async () => {
     try {
@@ -97,7 +97,16 @@ export function KnowledgeManager({ assistantId }: Props) {
     }
     setSearching(true);
     try {
-      setHits(await dbSearchChunks(supabase, assistantId, query, 5));
+      // Same server route the simulator uses: vector search when a Gemini key
+      // is available, BM25 otherwise.
+      const res = await fetch('/api/knowledge/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assistantId, query, topK: 5 }),
+      });
+      const json = (await res.json()) as { method?: string; hits?: RetrievedChunk[] };
+      setHits(json.hits ?? []);
+      setSearchMethod(json.method ?? null);
       setSearched(true);
     } catch (err) {
       console.error('[knowledge] search failed', err);
@@ -266,6 +275,14 @@ export function KnowledgeManager({ assistantId }: Props) {
               </div>
               {searched && (
                 <div className="mt-3 space-y-2">
+                  {hits.length > 0 && searchMethod && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span>Ranked by</span>
+                      <Badge variant="outline" className="text-[10px]">
+                        {searchMethod === 'vector' ? 'vector similarity' : 'keyword (BM25)'}
+                      </Badge>
+                    </div>
+                  )}
                   {hits.length === 0 ? (
                     <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
                       No matches.

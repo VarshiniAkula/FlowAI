@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import { GuardError, requireAssistantAccess } from '@/lib/auth/guards';
+import { resolveGeminiCredential } from '@/lib/gemini/credentials';
+import { embedTexts, toPgVector } from '@/lib/gemini/embeddings';
 import { chunkText } from '@/lib/knowledge/chunker';
 import { extractText, isSupportedFile, SUPPORTED_EXTENSIONS } from '@/lib/knowledge/extract';
 import { createSupabaseServiceClient } from '@/lib/supabase/service';
@@ -88,15 +90,20 @@ export async function POST(req: Request) {
       return errJson('EXTRACTION_FAILED', 'Could not save the document.', 500);
     }
 
-    // 4) Persist chunks.
+    // 4) Persist chunks. Embed with Gemini RETRIEVAL_DOCUMENT when a credential
+    //    is available so retrieval can use vector similarity; if no key (or
+    //    embedding fails) the chunks are stored without embeddings and
+    //    retrieval falls back to BM25 — never a hard failure.
     if (chunks.length > 0) {
-      const rows = chunks.map((c) => ({
+      const embeddings = await embedChunks(chunks.map((c) => c.text));
+      const rows = chunks.map((c, i) => ({
         org_id: orgId,
         assistant_id: assistantId,
         document_id: documentId,
         chunk_index: c.index,
         content: c.text,
         token_count: Math.ceil(c.text.length / 4),
+        embedding: embeddings ? toPgVector(embeddings[i]!) : null,
         metadata: {},
       }));
       const { error: chunkErr } = await service.from('document_chunks').insert(rows);
@@ -125,6 +132,32 @@ export async function POST(req: Request) {
     }
     console.error('[knowledge/ingest] error', err);
     return errJson('EXTRACTION_FAILED', 'Ingestion failed.', 500);
+  }
+}
+
+/**
+ * Embed chunk texts with Gemini (RETRIEVAL_DOCUMENT), batched. Returns aligned
+ * 768-dim vectors, or null when no Gemini credential is available or embedding
+ * fails — the caller then stores chunks without embeddings (BM25 fallback).
+ */
+async function embedChunks(texts: string[]): Promise<number[][] | null> {
+  const cred = await resolveGeminiCredential();
+  if (cred.mode !== 'byok' && cred.mode !== 'platform') return null;
+
+  const BATCH = 100;
+  try {
+    const out: number[][] = [];
+    for (let i = 0; i < texts.length; i += BATCH) {
+      const batch = texts.slice(i, i + BATCH);
+      const vecs = await embedTexts(cred.apiKey, batch, 'RETRIEVAL_DOCUMENT');
+      out.push(...vecs);
+    }
+    return out.length === texts.length ? out : null;
+  } catch (err) {
+    // Non-fatal: index without embeddings and let retrieval use BM25.
+    console.warn('[knowledge/ingest] embedding failed, storing without vectors');
+    void err;
+    return null;
   }
 }
 

@@ -4,8 +4,6 @@ import type {
   RetrievedChunk,
   RuntimeServices,
 } from '@flowmind/shared';
-import { dbSearchChunks } from '@/lib/db/knowledge';
-import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 
 /**
  * Default in-memory services suitable for the Simulator.
@@ -16,13 +14,29 @@ import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
  *   the server.
  */
 export function createSimulatorServices(assistantId: string): RuntimeServices {
-  const supabase = createSupabaseBrowserClient();
   return {
     retrieval: {
       async query(query: string, topK: number): Promise<RetrievedChunk[]> {
-        // Retrieve from Supabase-stored chunks (RLS-scoped to the user's org).
-        const hits = await dbSearchChunks(supabase, assistantId, query, topK);
-        return hits.map((h) => ({
+        // Retrieve via the server route: it embeds the query (Gemini
+        // RETRIEVAL_QUERY) and cosine-matches stored vectors, falling back to
+        // BM25. Embedding stays server-side so the Gemini key never reaches the
+        // browser.
+        const res = await fetch('/api/knowledge/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assistantId, query, topK }),
+        });
+        if (!res.ok) return [];
+        const json = (await res.json()) as {
+          hits?: Array<{
+            content: string;
+            documentId: string;
+            documentName: string;
+            chunkIndex: number;
+            score: number;
+          }>;
+        };
+        return (json.hits ?? []).map((h) => ({
           content: h.content,
           source: h.documentName,
           score: h.score,

@@ -13,6 +13,7 @@
     "type-check": "tsc --noEmit",
     "db:types": "supabase gen types typescript --local --schema public > lib/supabase/database.types.ts",
     "verify:rls": "tsx scripts/verify-rls.ts",
+    "backfill:embeddings": "tsx scripts/backfill-embeddings.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

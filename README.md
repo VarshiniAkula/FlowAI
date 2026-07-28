@@ -29,7 +29,8 @@ Security. Several subsystems are still stubbed or unbuilt (see below). Expect br
 | Gemini BYOK (bring your own key) | ✅ Connect a key per browser session — validated server-side, encrypted in an HttpOnly cookie, auto-expiring |
 | FlowMind Demo AI (shared Groq allowance) | 🟡 Optional. Signed-in users without a Gemini key get a small daily quota of real Groq (`openai/gpt-oss-20b`) responses on the LLM Response node, atomically capped per-user and globally |
 | Organizations (multi-member, invites, roles, switching) | ❌ Not built — each user gets one personal workspace |
-| Cloud ingestion (PDF/DOCX, embeddings, pgvector) | ❌ Not built yet |
+| Vector retrieval (pgvector, cosine) | ✅ Server-side — chunks embedded with Gemini `gemini-embedding-001` (768-dim), cosine match over HNSW, BM25-lite fallback when no key |
+| PDF/DOCX ingestion | ❌ Not built yet (`.txt/.md/.csv/.html` only) |
 | Publish + public chat + embeddable widget | 🟡 Legacy publish/hosted-chat works; new versioned schema + widget not built |
 
 Full, honest breakdown: **[docs/PRODUCT-SUMMARY.md](docs/PRODUCT-SUMMARY.md)**.
@@ -50,8 +51,10 @@ account** (isolated by Row-Level Security):
 - **Visual Canvas** — drag nodes, wire them, edit each node in the inspector, auto-saved.
   Executable node types: message, input, choice, condition, RAG query, LLM response.
 - **Knowledge** — upload `.txt / .md / .csv / .html`; the file is stored in **private Supabase
-  Storage**, parsed + chunked **on the server** into `document_chunks`, and retrieved per-user
-  via RLS (with a built-in retrieval tester). PDF/DOCX and vector embeddings are next.
+  Storage**, parsed + chunked **on the server** into `document_chunks`, embedded with Gemini
+  `gemini-embedding-001` (768-dim) when a key is present, and retrieved per-user via RLS
+  (vector cosine search, BM25-lite fallback; the retrieval tester shows which ran). PDF/DOCX
+  extraction is next.
 - **Test simulator** — run the whole flow with a live execution trace and variable capture.
   The LLM Response node has three modes: a connected **Gemini BYOK** key (highest priority),
   a limited shared **FlowMind Groq demo** allowance for signed-in users without a key, and a

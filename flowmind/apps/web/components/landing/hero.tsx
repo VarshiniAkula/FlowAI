@@ -22,16 +22,16 @@ const features = [
       'Design conversation flows on a visual canvas. Traced, node-by-node execution you can watch live.',
   },
   {
-    icon: Sparkles,
-    title: 'Story Builder',
-    description:
-      'Describe your assistant in plain English. Get a working graph — via Gemini when connected, a deterministic heuristic otherwise.',
-  },
-  {
     icon: Database,
     title: 'Knowledge Grounding',
     description:
       'Upload text, Markdown, CSV or HTML. Semantic retrieval with pgvector + Gemini embeddings, keyword fallback when no key is set.',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Publish & embed',
+    description:
+      'Ship to a hosted chat page, or drop a dependency-free widget onto any site — hosted link and HTTP API included.',
   },
   {
     icon: Zap,
@@ -80,7 +80,10 @@ export function Hero() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="#features">See features</Link>
+                <a href="/demo.html">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+                  Watch 2-min demo
+                </a>
               </Button>
             </div>
 

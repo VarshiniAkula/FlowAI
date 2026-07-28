@@ -167,11 +167,14 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - **Works today (legacy path):** `POST /api/publish` inserts a snapshot into a **legacy**
   `flowmind_published_assistants` table using the **anon key**, generates a `pub_<id>`, and a
   hosted chat page renders at `/chat/[id]`. Legacy `conversations`/`published`/`analytics`
-  routes back this.
+  routes back this. The **`/widget.js`** embed script (`public/widget.js`, served at
+  `/widget.js`) is built — a dependency-free floating bubble that mounts an iframe at
+  `/chat/<id>?embed=1`; the Deploy tab generates HTML/React/embed snippets, a hosted link, and
+  an HTTP-API snippet.
 - **Not built (target):** publish against the **new** `published_assistants` schema with
   versioning + unguessable IDs; the **public** `POST /api/chat/[publicId]` endpoint (CORS
-  `*`, rate limiting, service-role runtime, citations); the self-contained **`/widget.js`**
-  embeddable widget; disable/republish (the next publish milestone).
+  `*`, rate limiting, service-role runtime, citations); disable/republish (the next publish
+  milestone).
 
 ### 3.10 Analytics — 🟡
 - A legacy analytics route/panel exists (`/api/analytics/[assistantId]`), backed by the legacy

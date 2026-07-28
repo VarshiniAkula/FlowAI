@@ -32,7 +32,7 @@ Security. Several subsystems are still stubbed or unbuilt (see below). Expect br
 | Organizations (multi-member, invites, roles, switching) | ❌ Not built — each user gets one personal workspace |
 | Vector retrieval (pgvector, cosine) | ✅ Server-side — chunks embedded with Gemini `gemini-embedding-001` (768-dim), cosine match over HNSW, BM25-lite fallback when no key |
 | PDF/DOCX ingestion | ❌ Not built yet (`.txt/.md/.csv/.html` only) |
-| Publish + public chat + embeddable widget | 🟡 Legacy publish/hosted-chat works; new versioned schema + widget not built |
+| Publish + hosted chat + embeddable widget | 🟡 Legacy publish + hosted chat (`/chat/[id]`) + the `/widget.js` embed script all work; the new **versioned** publish schema is not built |
 
 Full, honest breakdown: **[docs/PRODUCT-SUMMARY.md](docs/PRODUCT-SUMMARY.md)**.
 
@@ -82,7 +82,8 @@ account** (isolated by Row-Level Security):
 | 5 | Server-side vector retrieval (cosine + BM25 fallback) | ✅ Done |
 | — | Real LLM answers (Gemini BYOK + FlowMind Groq demo) | ✅ Done |
 | — | Offline eval harness (RAG + workflow metrics) + CI | ✅ Done |
-| 6 | Publish flow (new schema), public chat endpoint, embeddable widget | ⬜ Planned |
+| — | Hosted chat + `/widget.js` embed (legacy publish path) | ✅ Done |
+| 6 | Versioned publish schema, rate-limited public chat endpoint, disable/republish | ⬜ Planned |
 | 7 | Analytics, error-code pass, final security sweep | ⬜ Planned |
 
 Details: [docs/flowmind-spec.md](docs/flowmind-spec.md) (spec),

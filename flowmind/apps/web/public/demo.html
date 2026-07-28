@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>FlowMind — Product Demo</title>
+<meta name="description" content="An auto-playing walkthrough of FlowMind v1: visual canvas, vector RAG, live simulator with Groq, deploy & embed, and internals.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🎬%3C/text%3E%3C/svg%3E">
+</head>
+<body style="margin:0">
+<style>
+  :root {
+    --indigo: #4f46e5;
+    --indigo-bright: #6366f1;
+    --indigo-soft: #eef2ff;
+    --indigo-ink: #3730a3;
+    --mint: #10b981;
+    --amber: #d97706;
+
+    --bg: #eef1f6;
+    --stage: #f7f9fb;
+    --surface: #ffffff;
+    --surface-2: #f1f4f9;
+    --text: #0f172a;
+    --muted: #5b6472;
+    --faint: #8b93a3;
+    --border: #e2e8f0;
+    --border-strong: #cdd5e2;
+
+    --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 12px 32px rgba(15,23,42,.10);
+    --shadow-lg: 0 2px 6px rgba(15,23,42,.08), 0 30px 70px rgba(30,27,75,.22);
+    --r: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --indigo: #6366f1;
+      --indigo-bright: #818cf8;
+      --indigo-soft: #1c2036;
+      --indigo-ink: #c7d2fe;
+      --bg: #060810;
+      --stage: #0b0e17;
+      --surface: #12151f;
+      --surface-2: #171b28;
+      --text: #e6e9f2;
+      --muted: #9aa3b6;
+      --faint: #6b7488;
+      --border: #262b3d;
+      --border-strong: #333a51;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5);
+      --shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 30px 70px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --indigo:#4f46e5; --indigo-bright:#6366f1; --indigo-soft:#eef2ff; --indigo-ink:#3730a3;
+    --bg:#eef1f6; --stage:#f7f9fb; --surface:#fff; --surface-2:#f1f4f9;
+    --text:#0f172a; --muted:#5b6472; --faint:#8b93a3; --border:#e2e8f0; --border-strong:#cdd5e2;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 12px 32px rgba(15,23,42,.10);
+    --shadow-lg:0 2px 6px rgba(15,23,42,.08),0 30px 70px rgba(30,27,75,.22);
+  }
+  :root[data-theme="dark"] {
+    --indigo:#6366f1; --indigo-bright:#818cf8; --indigo-soft:#1c2036; --indigo-ink:#c7d2fe;
+    --bg:#060810; --stage:#0b0e17; --surface:#12151f; --surface-2:#171b28;
+    --text:#e6e9f2; --muted:#9aa3b6; --faint:#6b7488; --border:#262b3d; --border-strong:#333a51;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 12px 32px rgba(0,0,0,.5);
+    --shadow-lg:0 2px 6px rgba(0,0,0,.5),0 30px 70px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    font-family: var(--font-sans);
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, color-mix(in srgb, var(--indigo) 12%, transparent), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, color-mix(in srgb, var(--mint) 8%, transparent), transparent 60%),
+      var(--bg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: clamp(14px, 3vw, 34px);
+    gap: 16px;
+  }
+
+  /* ---------- top bar ---------- */
+  .topbar { width: min(1080px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--indigo), var(--indigo-bright)); display: grid; place-items: center; color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--indigo) 45%, transparent); }
+  .brand b { font-family: var(--font-display); font-weight: 800; letter-spacing: -.02em; font-size: 18px; }
+  .brand span { color: var(--faint); font-size: 12.5px; margin-left: 2px; }
+  .verchip {
+    font-family: var(--font-mono); font-size: 11px; color: var(--indigo-ink);
+    background: var(--indigo-soft); border: 1px solid color-mix(in srgb, var(--indigo) 22%, transparent);
+    padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+  }
+
+  /* ---------- player ---------- */
+  .player {
+    width: min(1080px, 100%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+  .stage {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--indigo) 5%, var(--stage)), var(--stage));
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  .scene {
+    position: absolute; inset: 0;
+    padding: clamp(16px, 3.4vw, 40px);
+    display: flex; flex-direction: column;
+    opacity: 0; transform: translateY(10px) scale(.995);
+    transition: opacity .5s ease, transform .5s ease;
+    pointer-events: none;
+  }
+  .scene.is-active { opacity: 1; transform: none; pointer-events: auto; }
+
+  .eyebrow {
+    font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .16em;
+    font-size: clamp(9px, 1vw, 11px); color: var(--indigo-bright); font-weight: 700; margin-bottom: 10px;
+  }
+  .scene h2 { font-family: var(--font-display); font-weight: 800; letter-spacing: -.02em; text-wrap: balance; margin: 0; }
+
+  /* faux browser frame used across UI scenes */
+  .frame { background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .frame-bar { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--border-strong); }
+  .urlbar { flex: 1; font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tabs { display: flex; gap: 4px; padding: 7px 12px 0; background: var(--surface-2); }
+  .tab { font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 6px 11px; border-radius: 8px 8px 0 0; border: 1px solid transparent; }
+  .tab.on { color: var(--indigo); background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); }
+  .frame-body { padding: clamp(12px, 2vw, 20px); flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 999px; }
+  .pill.mint { color: #065f46; background: color-mix(in srgb, var(--mint) 18%, transparent); }
+  .pill.indigo { color: var(--indigo-ink); background: var(--indigo-soft); }
+  .pill.amber { color: #7c2d12; background: color-mix(in srgb, var(--amber) 20%, transparent); }
+  @media (prefers-color-scheme: dark) { .pill.mint { color:#6ee7b7; } .pill.amber { color:#fbbf24; } }
+  :root[data-theme="dark"] .pill.mint { color:#6ee7b7; }
+  :root[data-theme="dark"] .pill.amber { color:#fbbf24; }
+  :root[data-theme="light"] .pill.mint { color:#065f46; }
+  :root[data-theme="light"] .pill.amber { color:#7c2d12; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 0 color-mix(in srgb, var(--mint) 60%, transparent); animation: ping 1.8s ease-out infinite; }
+  @keyframes ping { 0%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--mint) 55%, transparent);} 70%,100%{ box-shadow: 0 0 0 7px transparent; } }
+
+  /* stagger reveal for children of an active scene */
+  .scene.is-active [data-reveal] { animation: rise .55s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
+  /* ---- title scene ---- */
+  .title-scene { align-items: flex-start; justify-content: center; gap: 18px; }
+  .title-scene h2 { font-size: clamp(30px, 6vw, 66px); line-height: 1.02; }
+  .title-scene .grad { background: linear-gradient(120deg, var(--indigo), var(--indigo-bright) 60%, var(--mint)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lede { color: var(--muted); font-size: clamp(13px, 1.7vw, 19px); max-width: 40ch; line-height: 1.5; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: clamp(10px, 1.2vw, 12.5px); font-weight: 650; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); display: inline-flex; align-items: center; gap: 7px; }
+  .chip svg { color: var(--indigo-bright); }
+
+  /* ---- story builder ---- */
+  .sb-input { border: 1px solid var(--border-strong); background: var(--surface-2); border-radius: 12px; padding: 14px 16px; font-size: clamp(12px,1.5vw,15px); line-height: 1.5; color: var(--text); position: relative; }
+  .caret { display:inline-block; width: 2px; height: 1.1em; background: var(--indigo); vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .sb-row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 10px; flex-wrap: wrap; }
+  .btn { font-weight: 700; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, var(--indigo), var(--indigo-bright)); border: none; border-radius: 10px; padding: 9px 15px; display: inline-flex; align-items: center; gap: 7px; box-shadow: 0 8px 20px color-mix(in srgb, var(--indigo) 35%, transparent); }
+  .gen-out { margin-top: 14px; display: grid; gap: 8px; }
+  .gen-node { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 12.5px; }
+  .gen-node .k { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; color: #fff; flex-shrink: 0; font-size: 11px; }
+
+  /* ---- canvas ---- */
+  .canvas { position: relative; flex: 1; border-radius: 12px; background:
+     radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 22px 22px, var(--surface-2);
+     border: 1px solid var(--border); overflow: hidden; }
+  .cv-flow { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: clamp(8px, 1.6vw, 20px); padding: 16px; flex-wrap: wrap; }
+  .node { background: var(--surface); border: 1.5px solid var(--border-strong); border-radius: 12px; padding: 10px 12px; min-width: 104px; box-shadow: var(--shadow); }
+  .node .nt { font-size: 9.5px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--faint); }
+  .node .nl { font-size: 12.5px; font-weight: 700; margin-top: 2px; }
+  .node .bar { height: 3px; border-radius: 3px; margin-bottom: 8px; }
+  .arrow { color: var(--border-strong); flex-shrink: 0; }
+
+  /* ---- knowledge / retrieval ---- */
+  .grid2 { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; flex: 1; min-height: 0; }
+  .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 14px; display: flex; flex-direction: column; min-height: 0; }
+  .card h4 { margin: 0 0 4px; font-size: 12.5px; font-weight: 750; }
+  .card .sub { font-size: 11px; color: var(--muted); }
+  .upload { margin-top: 10px; border: 1.5px dashed var(--border-strong); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 12px; }
+  .doc { display: flex; align-items: center; gap: 9px; margin-top: 9px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); font-size: 12px; }
+  .q { font-family: var(--font-mono); font-size: 11.5px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; color: var(--text); }
+  .hit { margin-top: 8px; border: 1px solid var(--border); border-left: 3px solid var(--indigo); border-radius: 8px; background: var(--surface); padding: 8px 10px; font-size: 11.5px; line-height: 1.4; }
+  .hit .meta { display: flex; justify-content: space-between; color: var(--faint); font-family: var(--font-mono); font-size: 10px; margin-top: 4px; }
+
+  /* ---- simulator ---- */
+  .sim { display: grid; grid-template-columns: 1.35fr 1fr; gap: 12px; flex: 1; min-height: 0; }
+  .chat { display: flex; flex-direction: column; gap: 9px; padding: 4px; overflow: hidden; }
+  .bubble { max-width: 82%; padding: 9px 12px; border-radius: 14px; font-size: 12.5px; line-height: 1.45; }
+  .bubble.bot { background: var(--surface-2); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 5px; }
+  .bubble.me { background: linear-gradient(135deg, var(--indigo), var(--indigo-bright)); color: #fff; align-self: flex-end; border-bottom-right-radius: 5px; }
+  .trace { border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); padding: 10px; overflow: hidden; }
+  .trace .th { display: flex; align-items: center; justify-content: space-between; font-size: 11px; font-weight: 750; margin-bottom: 8px; }
+  .tev { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10.5px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); margin-bottom: 5px; }
+  .tev .tt { margin-left: auto; color: var(--faint); }
+  .tev .badge { font-size: 9px; padding: 1px 6px; border-radius: 5px; background: var(--indigo-soft); color: var(--indigo-ink); font-weight: 700; }
+
+  /* ---- deploy ---- */
+  .deploy { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; flex: 1; min-height: 0; }
+
+  /* ---- under the hood ---- */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: 1; align-content: center; }
+  .stat { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); padding: 14px; }
+  .stat .ic { width: 30px; height: 30px; border-radius: 9px; background: var(--indigo-soft); color: var(--indigo); display: grid; place-items: center; margin-bottom: 9px; }
+  .stat b { font-size: 13px; display: block; }
+  .stat p { margin: 3px 0 0; font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+  /* ---- outro ---- */
+  .outro { align-items: center; justify-content: center; text-align: center; gap: 16px; }
+  .outro h2 { font-size: clamp(26px, 5vw, 52px); }
+  .outro .lede { max-width: 44ch; }
+
+  /* caption band */
+  .caption { padding: 14px clamp(16px,2.6vw,26px); display: flex; align-items: center; gap: 14px; background: var(--surface); }
+  .cap-idx { font-family: var(--font-mono); font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .cap-txt { font-size: clamp(13px, 1.7vw, 16px); font-weight: 600; text-wrap: balance; line-height: 1.35; }
+  .cap-txt b { color: var(--indigo); }
+
+  /* controls */
+  .controls { padding: 12px clamp(14px,2.4vw,22px) 16px; background: var(--surface); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 11px; }
+  .scrub { display: flex; gap: 5px; }
+  .seg { flex: 1; height: 5px; border-radius: 999px; background: var(--border); overflow: hidden; cursor: pointer; }
+  .seg i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--indigo), var(--indigo-bright)); border-radius: 999px; }
+  .seg.done i { width: 100%; }
+  .ctl-row { display: flex; align-items: center; gap: 12px; }
+  .ctl-btn { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; transition: border-color .15s, transform .1s; }
+  .ctl-btn:hover { border-color: var(--indigo); color: var(--indigo); }
+  .ctl-btn:active { transform: scale(.94); }
+  .ctl-btn.primary { background: linear-gradient(135deg, var(--indigo), var(--indigo-bright)); color: #fff; border: none; box-shadow: 0 8px 18px color-mix(in srgb, var(--indigo) 35%, transparent); }
+  .ctl-btn:focus-visible { outline: 2px solid var(--indigo-bright); outline-offset: 2px; }
+  .time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .rail { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .rail button { font-size: 11px; font-weight: 650; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; transition: all .15s; }
+  .rail button:hover { border-color: var(--indigo); color: var(--indigo); }
+  .rail button.on { background: var(--indigo-soft); border-color: color-mix(in srgb, var(--indigo) 30%, transparent); color: var(--indigo-ink); }
+  .rail button:focus-visible { outline: 2px solid var(--indigo-bright); outline-offset: 2px; }
+
+  .footer { width: min(1080px,100%); display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; color: var(--faint); font-size: 11.5px; }
+  .footer a { color: var(--muted); text-decoration: none; }
+  .footer a:hover { color: var(--indigo); }
+
+  @media (max-width: 720px) {
+    .grid2, .sim, .deploy { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .rail { display: none; }
+    .trace, .canvas .cv-flow .node:nth-child(n+9) { }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scene { transition: none; }
+    .scene.is-active [data-reveal] { animation: none; }
+    .caret, .live-dot { animation: none; }
+  }
+
+  /* ---- Force LIGHT mode (per request): canvas nodes stay legible; overrides
+         any dark media/toggle by winning on source order. ---- */
+  :root, :root[data-theme="dark"], :root[data-theme="light"] {
+    color-scheme: light;
+    --indigo:#4f46e5; --indigo-bright:#6366f1; --indigo-soft:#eef2ff; --indigo-ink:#3730a3;
+    --bg:#eef1f6; --stage:#f7f9fb; --surface:#ffffff; --surface-2:#f1f4f9;
+    --text:#0f172a; --muted:#5b6472; --faint:#8b93a3; --border:#e2e8f0; --border-strong:#cdd5e2;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 12px 32px rgba(15,23,42,.10);
+    --shadow-lg:0 2px 6px rgba(15,23,42,.08),0 30px 70px rgba(30,27,75,.22);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: light;
+      --indigo:#4f46e5; --indigo-bright:#6366f1; --indigo-soft:#eef2ff; --indigo-ink:#3730a3;
+      --bg:#eef1f6; --stage:#f7f9fb; --surface:#ffffff; --surface-2:#f1f4f9;
+      --text:#0f172a; --muted:#5b6472; --faint:#8b93a3; --border:#e2e8f0; --border-strong:#cdd5e2;
+      --shadow:0 1px 2px rgba(15,23,42,.06),0 12px 32px rgba(15,23,42,.10);
+      --shadow-lg:0 2px 6px rgba(15,23,42,.08),0 30px 70px rgba(30,27,75,.22);
+    }
+    .pill.mint { color:#065f46; } .pill.amber { color:#7c2d12; }
+  }
+  /* Stronger node borders so the graph reads clearly on the light canvas. */
+  .node { border-color: #c7cede; box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 6px 16px rgba(15,23,42,.08); }
+</style>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.9.8A3 3 0 0 0 4 9.5 3 3 0 0 0 6 15a3 3 0 0 0 6 1 3 3 0 0 0 6-1 3 3 0 0 0 2-5.5 3 3 0 0 0-2.1-3.7A3 3 0 1 0 12 5Z"/><path d="M12 5v14"/></svg>
+      </span>
+      <div><b>FlowMind</b> <span>product demo</span></div>
+    </div>
+    <div class="verchip">flowmind-nine-tau.vercel.app</div>
+  </div>
+
+  <div class="player" role="region" aria-label="FlowMind feature demo player">
+    <div class="stage" id="stage">
+
+      <!-- 0 · TITLE -->
+      <section class="scene title-scene is-active" data-dur="4200">
+        <span class="eyebrow" data-reveal>Product demo · live build</span>
+        <h2 data-reveal>Ship <span class="grad">grounded</span><br>AI assistants, visually.</h2>
+        <p class="lede" data-reveal>Design a conversation flow, ground it in your own documents, test it with a live trace, and deploy it — no brittle glue code.</p>
+        <div class="chips" data-reveal>
+          <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L20 7"/></svg>Real AI · Groq demo &amp; Gemini BYOK</span>
+          <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L20 7"/></svg>pgvector semantic RAG</span>
+          <span class="chip"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5L20 7"/></svg>Per-user isolation · RLS</span>
+        </div>
+      </section>
+
+      <!-- 2 · CANVAS -->
+      <section class="scene" data-dur="5200">
+        <span class="eyebrow" data-reveal>01 · Visual canvas</span>
+        <div class="frame" data-reveal>
+          <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="urlbar">flowmind-nine-tau.vercel.app/editor/…/canvas</span></div>
+          <div class="tabs"><span class="tab on">Canvas</span><span class="tab">Knowledge</span><span class="tab">Test</span><span class="tab">Deploy</span><span class="tab">Analytics</span></div>
+          <div class="frame-body" style="padding:0">
+            <div class="canvas">
+              <div class="cv-flow">
+                <div class="node" data-reveal><div class="bar" style="background:#0ea5e9"></div><div class="nt">message</div><div class="nl">Greet</div></div>
+                <svg class="arrow" width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M0 7h22m0 0-5-5m5 5-5 5"/></svg>
+                <div class="node" data-reveal><div class="bar" style="background:#8b5cf6"></div><div class="nt">choice</div><div class="nl">Topic</div></div>
+                <svg class="arrow" width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M0 7h22m0 0-5-5m5 5-5 5"/></svg>
+                <div class="node" data-reveal><div class="bar" style="background:#f59e0b"></div><div class="nt">input</div><div class="nl">Details</div></div>
+                <svg class="arrow" width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M0 7h22m0 0-5-5m5 5-5 5"/></svg>
+                <div class="node" data-reveal><div class="bar" style="background:#10b981"></div><div class="nt">rag_query</div><div class="nl">Lookup</div></div>
+                <svg class="arrow" width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M0 7h22m0 0-5-5m5 5-5 5"/></svg>
+                <div class="node" data-reveal><div class="bar" style="background:var(--indigo)"></div><div class="nt">llm_response</div><div class="nl">Answer</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 · KNOWLEDGE -->
+      <section class="scene" data-dur="6400">
+        <span class="eyebrow" data-reveal>02 · Knowledge &amp; retrieval</span>
+        <div class="frame" data-reveal>
+          <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="urlbar">flowmind-nine-tau.vercel.app/editor/…/knowledge</span></div>
+          <div class="frame-body">
+            <div class="grid2">
+              <div class="card" data-reveal>
+                <h4>Knowledge base</h4>
+                <div class="sub">Private Supabase Storage · parsed &amp; chunked on the server</div>
+                <div class="upload">Drop <b>.txt · .md · .csv · .html</b><br>up to 4&nbsp;MB</div>
+                <div class="doc"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--indigo)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg> flight-policy.md <span class="pill mint" style="margin-left:auto">12 chunks</span></div>
+              </div>
+              <div class="card" data-reveal>
+                <h4>Retrieval tester</h4>
+                <div class="sub">The same search the simulator's RAG node runs</div>
+                <div class="q" style="margin-top:9px">how many bags can I check for free?</div>
+                <div style="margin-top:8px;display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)">Ranked by <span class="pill indigo">vector similarity</span></div>
+                <div class="hit" data-reveal>“Baggage allowance: one carry-on and one checked bag up to 23&nbsp;kg are included free.”<div class="meta"><span>flight-policy.md · #3</span><span>score 0.91</span></div></div>
+                <div class="hit" data-reveal>“Cabin bag no larger than 55×40×20&nbsp;cm…”<div class="meta"><span>flight-policy.md · #4</span><span>score 0.78</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 · SIMULATOR -->
+      <section class="scene" data-dur="7200">
+        <span class="eyebrow" data-reveal>03 · Test simulator</span>
+        <div class="frame" data-reveal>
+          <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="urlbar">flowmind-nine-tau.vercel.app/editor/…/test</span></div>
+          <div class="frame-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap" data-reveal>
+              <span class="pill indigo"><span class="live-dot"></span>FlowMind Demo AI · 4 left today</span>
+              <span style="font-size:11px;color:var(--muted)">Real AI via the shared Groq allowance — or connect your own Gemini key</span>
+            </div>
+            <div class="sim">
+              <div class="chat">
+                <div class="bubble bot" data-reveal>Hi! I'm your flight assistant. Booking, baggage, or refunds?</div>
+                <div class="bubble me" data-reveal>How many bags can I check for free?</div>
+                <div class="bubble bot" data-reveal>You can check <b>one bag up to 23&nbsp;kg free</b>, plus a carry-on. Need the cabin-bag size limits too?</div>
+              </div>
+              <div class="trace" data-reveal>
+                <div class="th"><span>Execution trace</span><span class="pill mint">6 events</span></div>
+                <div class="tev">message <span class="tt">3ms</span></div>
+                <div class="tev">choice <span class="tt">6ms</span></div>
+                <div class="tev">rag_query <span class="tt">41ms</span></div>
+                <div class="tev">llm_response <span class="badge">groq</span><span class="tt">840ms</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 · DEPLOY -->
+      <section class="scene" data-dur="4600">
+        <span class="eyebrow" data-reveal>04 · Deploy</span>
+        <div class="frame" data-reveal>
+          <div class="frame-bar"><span class="dots"><i></i><i></i><i></i></span><span class="urlbar">flowmind-nine-tau.vercel.app/editor/…/deploy</span></div>
+          <div class="frame-body">
+            <div class="deploy">
+              <div class="card" data-reveal>
+                <h4>Publish</h4>
+                <div class="sub">Snapshot the graph &amp; settings, get a shareable link.</div>
+                <button class="btn" style="margin-top:12px;align-self:flex-start"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v13m0-13 4 4m-4-4-4 4M5 21h14"/></svg>Publish assistant</button>
+                <div style="margin-top:12px"><span class="pill mint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m5 12 5 5L20 7"/></svg>Published</span></div>
+              </div>
+              <div class="card" data-reveal>
+                <h4>Hosted chat</h4>
+                <div class="sub">A public page your users can talk to.</div>
+                <div class="q" style="margin-top:12px">/chat/pub_flight-support</div>
+                <div class="bubble bot" style="margin-top:12px;max-width:100%" data-reveal>How can I help with your flight today?</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 · UNDER THE HOOD -->
+      <section class="scene" data-dur="6000">
+        <span class="eyebrow" data-reveal>05 · Under the hood</span>
+        <h2 style="font-size:clamp(18px,2.6vw,26px);margin-bottom:14px" data-reveal>Multi-tenant-safe by construction — and continuously verified.</h2>
+        <div class="stats">
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div><b>Per-user isolation</b><p>Row-Level Security scopes every table; one account never sees another's data.</p></div>
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg></div><b>Atomic Groq quota</b><p>Per-user &amp; global daily caps enforced in Postgres with an advisory lock.</p></div>
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 11 3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></div><b>Offline eval harness</b><p><span style="font-family:var(--font-mono)">pnpm eval</span> — recall@k, MRR, workflow completion &amp; coverage.</p></div>
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div><b>Vector retrieval</b><p>Gemini embeddings + pgvector cosine, with a BM25 keyword fallback.</p></div>
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 5 5L20 7"/></svg></div><b>Green CI</b><p>GitHub Actions runs type-check · test · build on every push.</p></div>
+          <div class="stat" data-reveal><div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg></div><b>Modern stack</b><p>Next.js 15 · React 19 · TypeScript · Supabase · 94 passing tests.</p></div>
+        </div>
+      </section>
+
+      <!-- 7 · OUTRO -->
+      <section class="scene outro" data-dur="5200">
+        <span class="logo" style="width:52px;height:52px;border-radius:16px" data-reveal aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.9.8A3 3 0 0 0 4 9.5 3 3 0 0 0 6 15a3 3 0 0 0 6 1 3 3 0 0 0 6-1 3 3 0 0 0 2-5.5 3 3 0 0 0-2.1-3.7A3 3 0 1 0 12 5Z"/><path d="M12 5v14"/></svg></span>
+        <h2 data-reveal>Build your assistant<br>in <span class="grad">minutes</span>.</h2>
+        <p class="lede" data-reveal>Sign in, describe it, ground it, ship it. The demo is live now.</p>
+        <div class="verchip" data-reveal style="font-size:13px;padding:8px 14px">flowmind-nine-tau.vercel.app</div>
+        <p style="color:var(--faint);font-size:12px;margin:4px 0 0" data-reveal>Built by <b style="color:var(--muted)">Varshini Akula</b> · © 2026 · All rights reserved</p>
+      </section>
+
+    </div><!-- /stage -->
+
+    <div class="caption">
+      <span class="cap-idx" id="capIdx">01 / 07</span>
+      <span class="cap-txt" id="capTxt">A visual builder for grounded AI chat assistants.</span>
+    </div>
+
+    <div class="controls">
+      <div class="scrub" id="scrub" aria-hidden="true"></div>
+      <div class="ctl-row">
+        <button class="ctl-btn" id="prev" aria-label="Previous scene" title="Previous"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M18 5v14l-9-7 9-7zM7 5h2v14H7z"/></svg></button>
+        <button class="ctl-btn primary" id="play" aria-label="Play or pause" title="Play / pause"><svg id="playIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+        <button class="ctl-btn" id="next" aria-label="Next scene" title="Next"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5v14l9-7-9-7zm11 0h-2v14h2z"/></svg></button>
+        <span class="time" id="time">0:00 / 0:45</span>
+        <span class="pill indigo" style="margin-left:2px">CC</span>
+        <div class="rail" id="rail"></div>
+      </div>
+    </div>
+  </div><!-- /player -->
+
+  <div class="footer">
+    <span>An interactive product demo — not a recording. Use the controls or ← → / space.</span>
+    <span>FlowMind · <a href="https://flowmind-nine-tau.vercel.app">live demo</a></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var scenes = Array.prototype.slice.call(stage.querySelectorAll('.scene'));
+  var meta = [
+    { t: 'A visual builder for grounded AI chat assistants.' },
+    { t: 'Design on the <b>canvas</b> — six executable node types, wired and inspected.' },
+    { t: 'Ground answers in your docs — <b>pgvector</b> semantic search, keyword fallback.' },
+    { t: 'Test live with a full <b>execution trace</b>. Real AI via the Groq demo or Gemini.' },
+    { t: 'Publish to a <b>hosted chat page</b> or drop in an <b>embeddable widget</b>.' },
+    { t: 'Isolation, quotas, an eval harness, and green CI — <b>built to be trusted</b>.' },
+    { t: 'Start building — the demo is <b>live</b> now.' }
+  ];
+  var durs = scenes.map(function (s) { return parseInt(s.getAttribute('data-dur'), 10) || 5000; });
+  var total = durs.reduce(function (a, b) { return a + b; }, 0);
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var capIdx = document.getElementById('capIdx');
+  var capTxt = document.getElementById('capTxt');
+  var scrub = document.getElementById('scrub');
+  var rail = document.getElementById('rail');
+  var timeEl = document.getElementById('time');
+  var playBtn = document.getElementById('play');
+  var playIcon = document.getElementById('playIcon');
+  var PLAY = '<path d="M8 5v14l11-7z"/>';
+  var PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+
+  var segs = [], railBtns = [];
+  var names = ['Intro','Canvas','Knowledge','Simulator','Deploy','Internals','Start'];
+  scenes.forEach(function (_, i) {
+    var seg = document.createElement('div'); seg.className = 'seg';
+    var fill = document.createElement('i'); seg.appendChild(fill);
+    seg.addEventListener('click', function () { go(i, true); });
+    scrub.appendChild(seg); segs.push(fill);
+
+    var rb = document.createElement('button'); rb.textContent = names[i];
+    rb.addEventListener('click', function () { go(i, true); });
+    rail.appendChild(rb); railBtns.push(rb);
+  });
+
+  var cur = 0, playing = false, raf = null, segStart = 0, elapsedBefore = 0;
+
+  function fmt(ms) { var s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function priorMs(i) { var m = 0; for (var k = 0; k < i; k++) m += durs[k]; return m; }
+
+  function paint(p) {
+    for (var i = 0; i < segs.length; i++) {
+      if (i < cur) { segs[i].style.width = '100%'; segs[i].parentNode.classList.add('done'); }
+      else if (i === cur) { segs[i].parentNode.classList.remove('done'); segs[i].style.width = (p * 100).toFixed(2) + '%'; }
+      else { segs[i].style.width = '0%'; segs[i].parentNode.classList.remove('done'); }
+    }
+    timeEl.textContent = fmt(priorMs(cur) + p * durs[cur]) + ' / ' + fmt(total);
+  }
+
+  function go(i, fromUser) {
+    cur = (i + scenes.length) % scenes.length;
+    scenes.forEach(function (s, k) { s.classList.toggle('is-active', k === cur); });
+    // restart entrance animations
+    if (!reduce) {
+      var el = scenes[cur]; el.querySelectorAll('[data-reveal]').forEach(function (n, idx) {
+        n.style.animation = 'none'; void n.offsetWidth;
+        n.style.animation = ''; n.style.animationDelay = (idx * 70) + 'ms';
+      });
+    }
+    capIdx.textContent = ('0' + (cur + 1)).slice(-2) + ' / ' + ('0' + scenes.length).slice(-2);
+    capTxt.innerHTML = meta[cur].t;
+    railBtns.forEach(function (b, k) { b.classList.toggle('on', k === cur); });
+    elapsedBefore = 0; segStart = performance.now();
+    paint(0);
+    if (fromUser && !playing) { /* stay paused on manual jump */ }
+  }
+
+  function tick(now) {
+    if (!playing) return;
+    var el = elapsedBefore + (now - segStart);
+    var p = Math.min(1, el / durs[cur]);
+    paint(p);
+    if (p >= 1) {
+      if (cur === scenes.length - 1) { setPlaying(false); return; }
+      go(cur + 1);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    playIcon.innerHTML = on ? PAUSE : PLAY;
+    playBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    if (on) {
+      if (cur === scenes.length - 1) { go(0); }
+      segStart = performance.now();
+      raf = requestAnimationFrame(tick);
+    } else if (raf) {
+      cancelAnimationFrame(raf);
+      elapsedBefore = elapsedBefore + (performance.now() - segStart);
+    }
+  }
+
+  playBtn.addEventListener('click', function () { setPlaying(!playing); });
+  document.getElementById('prev').addEventListener('click', function () { go(cur - 1, true); });
+  document.getElementById('next').addEventListener('click', function () { go(cur + 1, true); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === ' ') { e.preventDefault(); setPlaying(!playing); }
+    else if (e.key === 'ArrowRight') { go(cur + 1, true); }
+    else if (e.key === 'ArrowLeft') { go(cur - 1, true); }
+  });
+
+  go(0);
+  playIcon.innerHTML = PLAY;
+  // Autostart the film (respects reduced-motion by still advancing, just without entrance motion).
+  setTimeout(function () { setPlaying(true); }, 550);
+})();
+</script>
+</body>
+</html>

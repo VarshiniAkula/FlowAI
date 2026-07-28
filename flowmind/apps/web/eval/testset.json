@@ -1,0 +1,74 @@
+{
+  "rag": [
+    {
+      "name": "baggage allowance query",
+      "query": "how much baggage can I bring for free",
+      "relevantIds": ["c-baggage"],
+      "k": 2,
+      "corpus": [
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
+      ]
+    },
+    {
+      "name": "refund timing query",
+      "query": "when will I get my money back after a refund",
+      "relevantIds": ["c-refund"],
+      "k": 2,
+      "corpus": [
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-refund", "text": "Billing and refund: your refund is processed to the original card within 7 business days." },
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "name": "flight support flow",
+      "turns": ["Baggage", "How many bags can I check for free?"],
+      "expect": { "completes": true, "variables": { "topic": "baggage" } },
+      "corpus": [
+        { "id": "c-baggage", "text": "Baggage allowance: one carry-on and one checked bag up to 23kg are included free." },
+        { "id": "c-refund", "text": "Refunds are processed to the original card within 7 business days." },
+        { "id": "c-seat", "text": "Seat selection is complimentary within 24 hours of departure." }
+      ],
+      "graph": {
+        "variables": [
+          { "name": "topic", "type": "string", "scope": "session" },
+          { "name": "issue", "type": "string", "scope": "session" },
+          { "name": "context", "type": "string", "scope": "session" },
+          { "name": "answer", "type": "string", "scope": "session" }
+        ],
+        "nodes": [
+          { "id": "greet", "type": "message", "label": "Greet", "position": { "x": 0, "y": 0 }, "data": { "text": "Hi! I'm your flight assistant." } },
+          { "id": "topic", "type": "choice", "label": "Topic", "position": { "x": 0, "y": 100 }, "data": { "prompt": "What do you need help with?", "variableName": "topic", "options": [ { "id": "o1", "label": "Billing", "value": "billing" }, { "id": "o2", "label": "Baggage", "value": "baggage" } ] } },
+          { "id": "details", "type": "input", "label": "Details", "position": { "x": 0, "y": 200 }, "data": { "prompt": "Describe your issue in a sentence.", "variableName": "issue" } },
+          { "id": "lookup", "type": "rag_query", "label": "Lookup", "position": { "x": 0, "y": 300 }, "data": { "queryTemplate": "{{issue}}", "topK": 3, "resultVariable": "context" } },
+          { "id": "answer", "type": "llm_response", "label": "Answer", "position": { "x": 0, "y": 400 }, "data": { "systemPrompt": "You are a helpful flight support agent.", "userTemplate": "Use this context: {{context}} to answer: {{issue}}", "model": "auto", "temperature": 0.7, "maxTokens": 300, "resultVariable": "answer" } },
+          { "id": "reply", "type": "message", "label": "Reply", "position": { "x": 0, "y": 500 }, "data": { "text": "{{answer}}" } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "greet", "target": "topic" },
+          { "id": "e2", "source": "topic", "target": "details" },
+          { "id": "e3", "source": "details", "target": "lookup" },
+          { "id": "e4", "source": "lookup", "target": "answer" },
+          { "id": "e5", "source": "answer", "target": "reply" }
+        ]
+      }
+    },
+    {
+      "name": "greeting only",
+      "turns": [],
+      "expect": { "completes": true },
+      "graph": {
+        "variables": [],
+        "nodes": [
+          { "id": "hello", "type": "message", "label": "Hello", "position": { "x": 0, "y": 0 }, "data": { "text": "Welcome!" } },
+          { "id": "bye", "type": "message", "label": "Bye", "position": { "x": 0, "y": 100 }, "data": { "text": "Goodbye!" } }
+        ],
+        "edges": [{ "id": "e1", "source": "hello", "target": "bye" }]
+      }
+    }
+  ]
+}

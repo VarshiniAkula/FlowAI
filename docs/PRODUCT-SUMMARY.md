@@ -219,6 +219,19 @@ Legend: ✅ works now · 🟡 partial / prototype-grade · ❌ not built yet
 - **Privacy:** demo requests send the LLM node prompt to Groq; the UI warns not to enter
   confidential, regulated, or personal information in the public prototype.
 
+### 3.13 Evaluation harness — ✅
+- **Offline, deterministic, provider-free** eval via `pnpm --filter @flowmind/web eval`
+  (`scripts/eval.ts`, test set at `eval/testset.json`). No tokens spent, CI-friendly.
+- **RAG metrics** (`lib/eval/metrics.ts`): precision@k, recall@k, hit@k, and MRR per query,
+  scored with the BM25-lite lexical scorer over an inline corpus. (Vector-quality eval needs a
+  Gemini key and is out of scope for the offline harness.)
+- **Workflow metrics**: each case runs through the real runtime engine with stub services
+  (fixed LLM reply + in-memory retrieval), reporting completion rate, node coverage, turn
+  count, error rate, and captured-variable accuracy against declared expectations.
+- The runner exits non-zero when a workflow case misses its expectation, so it doubles as a
+  regression gate. No LLM-judge (groundedness/faithfulness) metric yet — a deliberate choice to
+  keep the harness deterministic and free.
+
 ---
 
 ## 4. Backend foundation (Phase 1) — shipped, applied, verified

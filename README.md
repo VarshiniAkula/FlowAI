@@ -169,6 +169,11 @@ pnpm verify:rls                         # asserts every cross-tenant access is d
 | `pnpm db:types` | Regenerate Supabase types |
 | `pnpm verify:rls` | Cross-tenant RLS test suite (needs Supabase env) |
 | `pnpm test` | Unit + route tests (Vitest) |
+| `pnpm eval` | Offline RAG + workflow eval harness (deterministic; `eval/testset.json`) |
+| `pnpm backfill:embeddings` | Embed pre-existing chunks (needs `GEMINI_API_KEY`) |
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) runs type-check · test · build on every
+push to `main` and every PR.
 
 ---
 
